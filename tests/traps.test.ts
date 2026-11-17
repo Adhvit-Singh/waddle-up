@@ -50,3 +50,59 @@ test('loadBans restores the banned list', () => {
   assert.equal(td.isBanned(7, 'Gust'), true);
   assert.equal(td.isBanned(9, 'Ice'), true);
 });
+
+// ---------------------------------------------------------------- round 2 rules
+import { SaveSystem, normalizeSave } from '../src/core/SaveSystem.ts';
+
+test('trap chance: none on stage 1, ~10% at stage 2 rising to ~45% at stage 20', () => {
+  assert.equal(TrapDirector.chanceFor(0), 0);
+  assert.ok(Math.abs(TrapDirector.chanceFor(1) - 0.10) < 1e-9);
+  assert.ok(Math.abs(TrapDirector.chanceFor(19) - 0.45) < 1e-9);
+});
+
+test('a trap never fires twice at the same ledge in one game', () => {
+  const td = setup();
+  const realRandom = Math.random; Math.random = () => 0;
+  try {
+    td.onLanded(ledge(40), 2);
+    const first = td.lastFired!;
+    assert.equal(first.ledge, 40);
+    Time.time += 30; td.onLanded(ledge(41), 2);
+    Time.time += 30; td.onLanded(ledge(40), 2);
+    assert.notEqual(td.lastFired!.type, first.type);
+    assert.ok(td.exportFired().includes(`40:${first.type}`));
+  } finally { Math.random = realRandom; }
+});
+
+test("last game's (ledge, trap) pairs are avoided in the next game", () => {
+  const td = setup();
+  const realRandom = Math.random; Math.random = () => 0;
+  try {
+    td.loadRun([], [], ['40:Crumble']);
+    td.onLanded(ledge(40), 2);
+    assert.notEqual(td.lastFired!.type, 'Crumble');
+  } finally { Math.random = realRandom; }
+});
+
+test('endRun stores this game\'s fired traps for the next game', () => {
+  const m = new Map<string, string>();
+  SaveSystem.setStorage({ getItem: k => m.get(k) ?? null, setItem: (k, v) => { m.set(k, v); }, removeItem: k => { m.delete(k); } } as never);
+  const td = setup();
+  td.loadRun([], ['7:Gust', '9:Ice'], []);
+  td.endRun();
+  assert.deepEqual(SaveSystem.lastRunTraps, ['7:Gust', '9:Ice']);
+});
+
+test('saves remember fired traps (old saves default to [])', () => {
+  assert.deepEqual(normalizeSave({} as never).firedTraps, []);
+});
+
+test('the cooldown between traps is 4 seconds', () => {
+  const td = setup();
+  const realRandom = Math.random; Math.random = () => 0;
+  try {
+    td.onLanded(ledge(40), 2); const n = td.trapsFired;
+    Time.time += 3.9; td.onLanded(ledge(41), 2); assert.equal(td.trapsFired, n);
+    Time.time += 0.2; td.onLanded(ledge(42), 2); assert.equal(td.trapsFired, n + 1);
+  } finally { Math.random = realRandom; }
+});

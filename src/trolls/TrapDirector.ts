@@ -7,6 +7,7 @@ import { lerp, css } from '../core/math.ts';
 import { LedgeKind } from '../core/StageData.ts';
 import { AudioManager } from '../audio/AudioManager.ts';
 import { Taunts } from './Taunts.ts';
+import { SaveSystem } from '../core/SaveSystem.ts';
 import type { Ledge } from '../world/Ledge.ts';
 
 export type TrapType = 'None' | 'Crumble' | 'Sneeze' | 'Gust' | 'Ice' | 'Shy' | 'Bounce' | 'Snowball' | 'CameraFlip' | 'Gravity' | 'Blackout' | 'Trapdoor' | 'Achievement' | 'External';
@@ -28,7 +29,7 @@ const DEFS: TrapDef[] = [
   { type: 'Trapdoor', minStage: 9, weight: 0.12 },
 ];
 
-const COOLDOWN = 7;
+const COOLDOWN = 4;
 
 /** Hook for spawning the snowball (needs the scene + physics; injected by the game). */
 export type SnowballSpawner = (from: THREE.Vector3) => void;
@@ -49,6 +50,11 @@ export class TrapDirector {
   private lastTrapLedge = -1;
   private shyArmed: Ledge | null = null;
   trapsFired = 0;
+  /** every (ledge, trap) that fired this game: never repeats this game */
+  private fired = new Set<string>();
+  /** pairs from the previous game: avoided this game */
+  private lastRun = new Set<string>();
+  lastFired: { type: TrapType; ledge: number } | null = null;
   private getLedge: (i: number) => Ledge | null;
   spawnSnowball: SnowballSpawner = () => {};
 
@@ -57,6 +63,20 @@ export class TrapDirector {
     this.getLedge = getLedge;
     refs.traps = this;
   }
+
+  static chanceFor(stage: number) { return stage < 1 ? 0 : lerp(0.10, 0.45, (stage - 1) / 18); }
+
+  /** start/resume a game: bans (fell-after-trap), traps already fired this game, and last game's pairs to avoid */
+  loadRun(bans: string[] | null | undefined, fired: string[] | null | undefined, lastRun: string[] | null | undefined) {
+    this.loadBans(bans);
+    this.fired = new Set(fired ?? []);
+    this.lastRun = new Set(lastRun ?? []);
+  }
+
+  exportFired() { return [...this.fired]; }
+
+  /** the game ended (summit, or abandoned by New Game): remember its traps so the next game differs */
+  endRun() { SaveSystem.lastRunTraps = [...this.fired]; }
 
   loadBans(list: string[] | null | undefined) {
     this.banned.clear(); this.grace.clear();
@@ -85,9 +105,7 @@ export class TrapDirector {
     if (Time.time - this.lastTrapTime < COOLDOWN) return;
     if (l.stage < 1 || l.kind === LedgeKind.Rest) return;
 
-    const stage01 = (l.stage - 1) / 19;
-    const chance = lerp(0.035, 0.21, stage01);
-    if (UnityRandom.value() > chance) return;
+    if (UnityRandom.value() > TrapDirector.chanceFor(l.stage)) return;
 
     const type = this.pickTrap(l);
     if (type === 'None') return;
@@ -100,6 +118,8 @@ export class TrapDirector {
     for (const d of DEFS) {
       if (l.stage < d.minStage) continue;
       if (this.isBanned(l.index, d.type)) continue;
+      const k = TrapDirector.key(l.index, d.type);
+      if (this.fired.has(k) || this.lastRun.has(k)) continue;
       if (!this.applicable(d.type, l)) continue;
       let w = d.weight;
       // nastier higher up
@@ -129,6 +149,8 @@ export class TrapDirector {
   }
 
   private fire(type: TrapType, l: Ledge) {
+    this.fired.add(TrapDirector.key(l.index, type));
+    this.lastFired = { type, ledge: l.index };
     if (type !== 'Achievement') {
       this.lastTrapTime = Time.time;
       this.lastTrapType = type;
@@ -216,7 +238,7 @@ export class TrapDirector {
       case 'Trapdoor':
         this.lastTrapdoorTime = Time.time;
         yield 0.5;
-        if (pc && pc.groundLedge === l) refs.game?.sendToBottom("The mountain's refund policy: back to the start.");
+        if (pc && pc.groundLedge === l) refs.game?.sendToStageStart("The mountain's refund policy: back to the start of the stage.");
         else this.lastTrapdoorTime = -9999;
         break;
 

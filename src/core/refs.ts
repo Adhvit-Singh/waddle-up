@@ -21,6 +21,7 @@ export interface GameRef {
   readonly currentStage: number;
   data: { trapsTriggered: number; inversions: number };
   sendToBottom(msg: string): void;
+  sendToStageStart(msg: string): void;
 }
 
 export interface UIRef {

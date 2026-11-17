@@ -232,10 +232,11 @@ export class SequenceDirector {
 
     // ---- results
     const best = SaveSystem.bestTime;
-    const newBest = best <= 0 || finalTime < best;
-    if (newBest) SaveSystem.bestTime = finalTime;
+    const newBest = !gm.data.devUsed && (best <= 0 || finalTime < best);
+    if (newBest && !gm.data.devUsed) SaveSystem.bestTime = finalTime;
     SaveSystem.wins = SaveSystem.wins + 1;
     const data = gm.data;
+    gm.traps.endRun();
     SaveSystem.clear();
     WorldDecor.instance.doomAmount = 0;
     AudioManager.setMusicMultiplier(1);

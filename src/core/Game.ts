@@ -202,13 +202,16 @@ export class Game implements GameForUI {
       this.penguin.teleport(p, this.data.yaw);
       this.lastSafePos.copy(p); this.lastSafeYaw = this.data.yaw;
     } else {
+      // abandoning an old game: its traps become "last game's" so this game differs
+      const old = SaveSystem.load();
+      if (old && old.firedTraps.length) SaveSystem.lastRunTraps = old.firedTraps;
       SaveSystem.clear();
       this.data = newSaveData();
       this.penguin.teleport(this.mountain.spawnPoint, this.mountain.spawnYaw);
       this.lastSafePos.copy(this.mountain.spawnPoint); this.lastSafeYaw = this.mountain.spawnYaw;
       this.saveNowForce();
     }
-    this.traps.loadBans(this.data.bannedTraps);
+    this.traps.loadRun(this.data.bannedTraps, this.data.firedTraps, SaveSystem.lastRunTraps);
     this.chaos.resetTimer();
     this.currentStage = this.mountain.stageAtHeight(this.penguin.position.y);
     this.lastBannerStage = -1;
@@ -375,17 +378,26 @@ export class Game implements GameForUI {
     Scheduler.start(this, this.sendToBottomRoutine(message));
   }
 
-  private *sendToBottomRoutine(message: string): Co {
+  /** Trapdoor: back to the rest platform at the start of the current stage (not the very bottom). */
+  sendToStageStart(message: string) {
+    if (this.sendingToBottom || this.state === GState.Ending) return;
+    const rest = this.mountain.ledges.find(l => l.stage === this.currentStage && l.kind === LedgeKind.Rest);
+    if (!rest) { this.sendToBottom(message); return; }
+    const pos = rest.position.add(new THREE.Vector3(0, 0.05, 0));
+    Scheduler.start(this, this.sendToBottomRoutine(message, pos, yawOf(rest.forward), false));
+  }
+
+  private *sendToBottomRoutine(message: string, target = this.mountain.spawnPoint, yaw = this.mountain.spawnYaw, isBottom = true): Co {
     this.sendingToBottom = true;
     this.penguin.inputLocked = true;
     AudioManager.play('suck', 0.9);
-    const drop = this.penguin.position.y - this.mountain.spawnPoint.y;
+    const drop = this.penguin.position.y - target.y;
     const tint = css(0.9, 0.95, 1);
     yield* this.ui.fade(1, 0.45, tint);
-    this.penguin.teleport(this.mountain.spawnPoint, this.mountain.spawnYaw);
-    this.lastSafePos.copy(this.mountain.spawnPoint);
+    this.penguin.teleport(target, yaw);
+    this.lastSafePos.copy(target);
     this.cam.snapBehindTarget();
-    this.data.falls++; this.data.bottomResets++;
+    this.data.falls++; if (isBottom) this.data.bottomResets++;
     SaveSystem.lifetimeFalls = SaveSystem.lifetimeFalls + 1;
     if (drop > this.data.biggestFall) this.data.biggestFall = drop;
     yield 0.3;
@@ -408,6 +420,7 @@ export class Game implements GameForUI {
     this.data.px = this.lastSafePos.x; this.data.py = this.lastSafePos.y; this.data.pz = this.lastSafePos.z;
     this.data.yaw = this.lastSafeYaw;
     this.data.bannedTraps = this.traps.exportBans();
+    this.data.firedTraps = this.traps.exportFired();
     SaveSystem.save(this.data);
   }
 
