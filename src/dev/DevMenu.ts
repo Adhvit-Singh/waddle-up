@@ -20,6 +20,17 @@ export function installDevMenu(g: Game) {
   for (const t of TRAPS) btn(t, () => { const l = g.penguin.groundLedge; if (l) g.traps.forceFire(t, l); });
   document.body.appendChild(el);
   addEventListener('keydown', e => {
+    // F8: start of the next stage · F9: last ledge before the current summit
+    if (e.code === 'F8') { e.preventDefault(); devGotoStage(g, g.currentStage + 1); return; }
+    if (e.code === 'F9' && g.state === 2) {
+      e.preventDefault();
+      const t = g.mountain.tiers[Math.min(g.data.tiersRevealed, 2)];
+      const l = [...g.mountain.ledges].reverse().find(x => x.stage === t.lastStage)!;
+      g.data.devUsed = true;
+      g.penguin.teleport(l.position.add(new THREE.Vector3(0, 0.2, 0)), yawOf(l.forward));
+      g.cam.snapBehindTarget();
+      return;
+    }
     if (e.code !== 'F10') return;
     e.preventDefault();
     const open = el.style.display === 'none';
@@ -30,7 +41,7 @@ export function installDevMenu(g: Game) {
 
 /** teleport to a stage's start platform, revealing the tiers it needs (marks the run as dev-touched: no best time) */
 export function devGotoStage(g: Game, stage: number) {
-  if (g.state !== 2) return;
+  if (g.state !== 2 || stage < 0 || stage > 19) return;
   const rest = g.mountain.ledges.find(l => l.stage === stage && l.kind === LedgeKind.Rest);
   if (!rest) return;
   const tier = g.mountain.tiers.findIndex(t => t.root === rest.root);

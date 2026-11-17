@@ -293,8 +293,6 @@ export class Game implements GameForUI {
     // clicking back into the game re-locks the cursor
     if (this.state === GState.Playing && !Input.isLocked && Input.mouseClicked) this.setCursor(true);
 
-    if (import.meta.env.DEV) this.debugKeys();
-
     if (this.state !== GState.Playing) return;
 
     const dt = Time.deltaTime;
@@ -342,24 +340,6 @@ export class Game implements GameForUI {
     if (pc.grounded && pos.y >= tier.topY - 0.35 && horiz < tier.rTop + 0.3 && !this.sendingToBottom) {
       if (tierIdx < this.mountain.tiers.length - 1) this.seq.runFakeSummit(tierIdx);
       else this.seq.runEnding();
-    }
-  }
-
-  /** dev-only helpers (npm run dev): F9 = jump to the current tier's last ledge, F8 = jump to next stage start */
-  private debugKeys() {
-    if (this.state !== GState.Playing) return;
-    if (Input.wasPressed('F9')) {
-      const t = this.mountain.tiers[Math.min(this.data.tiersRevealed, 2)];
-      const l = [...this.mountain.ledges].reverse().find(x => x.stage === t.lastStage)!;
-      this.penguin.teleport(l.position.add(new THREE.Vector3(0, 0.2, 0)), yawOf(l.forward));
-      this.cam.snapBehindTarget();
-    }
-    if (Input.wasPressed('F8')) {
-      const next = this.mountain.ledges.find(x => x.stage === this.currentStage + 1 && x.kind === LedgeKind.Rest);
-      if (next && this.mountain.isTierActive(this.mountain.tiers.findIndex(t => t.root === next.root))) {
-        this.penguin.teleport(next.position.add(new THREE.Vector3(0, 0.2, 0)), yawOf(next.forward));
-        this.cam.snapBehindTarget();
-      }
     }
   }
 

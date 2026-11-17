@@ -5,6 +5,6 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 test('the deployable build contains no developer menu', { skip: !existsSync('dist/assets') }, () => {
   for (const f of readdirSync('dist/assets').filter(f => f.endsWith('.js'))) {
     const js = readFileSync(`dist/assets/${f}`, 'utf8');
-    assert.ok(!js.includes('DEV MENU') && !js.includes('devGotoStage') && !js.includes('__wu'), `${f} contains dev code`);
+    for (const s of ['DEV MENU', 'devGotoStage', '__wu', 'debugKeys']) assert.ok(!js.includes(s), `${f} contains dev code (${s})`);
   }
 });
