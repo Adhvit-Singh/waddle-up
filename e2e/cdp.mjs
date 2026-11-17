@@ -29,7 +29,7 @@ const send = (method, params = {}) => new Promise(r => { const i = ++id; pending
 await send('Runtime.enable');
 await send('Page.enable');
 
-const KEYS = { KeyW: ['w', 87], KeyA: ['a', 65], KeyS: ['s', 83], KeyD: ['d', 68], Space: [' ', 32], Escape: ['Escape', 27], ControlLeft: ['Control', 17], F9: ['F9', 120] };
+const KEYS = { KeyW: ['w', 87], KeyA: ['a', 65], KeyS: ['s', 83], KeyD: ['d', 68], Space: [' ', 32], Escape: ['Escape', 27], ControlLeft: ['Control', 17], F9: ['F9', 120], F10: ['F10', 121] };
 const api = {
   send,
   sleep,
