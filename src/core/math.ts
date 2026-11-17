@@ -81,3 +81,6 @@ export const WHITE = () => col(1, 1, 1);
 export const BLACK = () => col(0, 0, 0);
 /** Unity material / light / fog colors are authored in gamma space and converted — same as three's sRGB input. */
 export const srgb = (r: number, g: number, b: number) => new THREE.Color().setRGB(r, g, b, THREE.SRGBColorSpace);
+/** Unity UI Color(r,g,b,a) → CSS color string */
+export const css = (r: number, g: number, b: number, a = 1) =>
+  `rgba(${Math.round(Math.min(1, r) * 255)},${Math.round(Math.min(1, g) * 255)},${Math.round(Math.min(1, b) * 255)},${a})`;

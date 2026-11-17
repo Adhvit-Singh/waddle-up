@@ -63,7 +63,7 @@ export class Game {
 
     // temporary (Task 4): straight into play, click to capture the mouse
     const game = this;
-    refs.game = { get isPlaying() { return game.playing; }, currentStage: 0, sendToBottom: () => this.penguin.teleport(this.mountain.spawnPoint, this.mountain.spawnYaw) };
+    refs.game = { get isPlaying() { return game.playing; }, currentStage: 0, data: { trapsTriggered: 0, inversions: 0 }, sendToBottom: () => this.penguin.teleport(this.mountain.spawnPoint, this.mountain.spawnYaw) };
     this.playing = true;
     this.cam.mode = CamMode.Follow;
     this.cam.snapBehindTarget();
