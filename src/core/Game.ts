@@ -60,6 +60,7 @@ export class Game implements GameForUI {
   private lastSafeYaw = 0;
   private sendingToBottom = false;
   private hadPointerLock = false;
+  private lockLostAt = -1;
 
   constructor(canvas: HTMLCanvasElement) {
     Game.instance = this;
@@ -137,7 +138,7 @@ export class Game implements GameForUI {
     // Esc while the mouse is captured is eaten by the browser to release the pointer: treat that as "pause"
     Input.onLockChange(locked => {
       if (locked) { this.hadPointerLock = true; return; }
-      if (this.hadPointerLock && this.state === GState.Playing) this.setPaused(true);
+      if (this.hadPointerLock && this.state === GState.Playing) { this.setPaused(true); this.lockLostAt = Time.unscaledTime; }
       this.hadPointerLock = false;
     });
   }
@@ -270,7 +271,8 @@ export class Game implements GameForUI {
   // ------------------------------------------------------------------ Update
 
   private update() {
-    let esc = Input.wasPressed('Escape');
+    // the Esc that released the mouse may also arrive as a key press: don't let it instantly un-pause
+    let esc = Input.wasPressed('Escape') && Time.unscaledTime - this.lockLostAt > 0.3;
     const gp = Input.gamepad();
     if (gp && gp.pressed(9)) esc = true;
 
