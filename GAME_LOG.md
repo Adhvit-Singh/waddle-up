@@ -102,3 +102,17 @@ tests/                      node --test unit tests (npm test)
     (ledge 259 sits 1.66 m / 1.88 m above ledges 248/247; 254 is 2.45 m above 241). Ask the user.
   - Final check done: all browser checks pass (bounce, 20 traps, dev menu, full summit flow), 50/50 unit tests,
     build scan proves no developer code ships (F8/F9/F10 all live in src/dev/, dev server only). README updated.
+- **2026-11-18 (round 3: play-test fixes)**: design `docs/superpowers/specs/2026-11-18-round3-fixes-design.md`
+  1. Fake summit no longer traps you inside the rising tier (round-2 taper had made the plateau narrower than the tier
+     rising out of it). Tiers now 27.5 / 23→19 / 14.5→8.5; flag + cutscene spot in the middle of a ≥4.5 m free ring;
+     crags on the rim edge. Unit test + e2e check that you stand on the plateau after each rise.
+  2. F10 dev menu doesn't pause; picking a stage/trap closes it and recaptures the mouse; Esc closes it.
+  3. Wind gusts half as strong (`src/trolls/windStrength.ts`).
+  4. Camera swings outward instead of jamming against the rock (e2e: jammed 0.8–1.4 m before → 6.5 m, clear view).
+  5. No loop skipping: top tier wide enough (0 jump+grab skip routes, was 16) + rule: no auto-grab more than 2 ledges
+     ahead of the last ledge stood on (`src/player/grabRule.ts`).
+  6. Stage 18 head-bump spots gone (lowest ceiling 2.78 m, was 1.66 m); test exceptions removed.
+  7. Esc never resumes (only RESUME); Esc still closes sub-menus. RESUME always dodges 4–7 times and now stays on top
+     of the other buttons (it used to be able to hide behind them, so clicks hit Settings).
+  Jumps still provably identical (fixture test). Unit tests 63/63; e2e: bounce, traps (20), grab, pause, devmenu,
+  devmenu-esc, camera, summits — all pass. Build has no dev code (dist scan).
