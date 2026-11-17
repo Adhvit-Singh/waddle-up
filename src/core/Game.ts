@@ -8,6 +8,7 @@ import { MountainGenerator } from '../world/MountainGenerator.ts';
 import { WorldDecor } from '../world/WorldDecor.ts';
 import { Effects } from '../world/Effects.ts';
 import { Input } from './Input.ts';
+import { AudioManager } from '../audio/AudioManager.ts';
 import { GameSettings } from './GameSettings.ts';
 import { PenguinController } from '../player/PenguinController.ts';
 import { PenguinVisual } from '../player/PenguinVisual.ts';
@@ -50,6 +51,8 @@ export class Game {
 
     GameSettings.load();
     Input.init(this.renderer.domElement);
+    AudioManager.prepare();
+    Input.onGesture(() => AudioManager.unlock());
     this.penguin = new PenguinController(this.scene);
     new PenguinVisual(this.penguin);
     this.penguin.teleport(this.mountain.spawnPoint, this.mountain.spawnYaw);
@@ -98,6 +101,7 @@ export class Game {
     Loop.update();
     Scheduler.update();
     Loop.late();
+    AudioManager.update();
     Effects.update(Time.deltaTime);
     this.decor.focusShadows(this.penguin.object.position);
     this.renderer.render(this.scene, this.camera);
