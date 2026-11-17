@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Waddle Up</title>
+  <style>
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #0b1020; }
+    #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+    #ui { position: fixed; inset: 0; pointer-events: none; }
+    #mobile { display: none; position: fixed; inset: 0; z-index: 100; background: #0b1020; color: #f4f7fb;
+      font: 600 20px/1.4 system-ui, sans-serif; align-items: center; justify-content: center; text-align: center; padding: 16px; }
+    #loading { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; color: #9fdcff;
+      font: italic 600 24px system-ui, sans-serif; z-index: 50; background: #0b1020; }
+  </style>
+</head>
+<body>
+  <canvas id="game"></canvas>
+  <div id="ui"></div>
+  <div id="loading">building a mountain…</div>
+  <div id="mobile"><div><b style="font-size:34px">WADDLE UP</b><br><br>Waddle Up is a PC game.<br>Open this link on a computer (keyboard + mouse).</div></div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
