@@ -4,7 +4,7 @@ import { Input } from '../core/Input.ts';
 import { Loop } from '../core/loop.ts';
 import { refs } from '../core/refs.ts';
 import { UnityRandom } from '../core/rng.ts';
-import { clamp, lerp, inverseLerp, moveTowards, sign, eulerDeg, lookRotation, yawOf } from '../core/math.ts';
+import { clamp, lerp, inverseLerp, moveTowards, moveTowardsAngle, sign, eulerDeg, lookRotation, yawOf, Rad2Deg } from '../core/math.ts';
 import { Physics } from '../physics/Physics.ts';
 import { AudioManager } from '../audio/AudioManager.ts';
 import { GameSettings } from '../core/GameSettings.ts';
@@ -124,9 +124,27 @@ export class ThirdPersonCamera {
       }
     }
     this.pitch = clamp(this.pitch, -30, 72);
+    this.swingOutIfSqueezed(dt);
     const flipStep = sign(this.yawExtra) * Math.min(Math.abs(this.yawExtra), 600 * dt);
     this.yaw += flipStep; this.yawExtra -= flipStep;
     this.place(dt, false);
+  }
+
+  /**
+   * Round 3: when rock behind the penguin would pull the camera in tight (view blocked), swing the camera around toward
+   * "outward from the mountain" instead, so you keep a clear view. The normal collision pull-in stays as a safety net.
+   */
+  private swingOutIfSqueezed(dt: number) {
+    if (!this.target) return;
+    const from = this.target.position.clone().add(new THREE.Vector3(0, 1, 0));
+    const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(eulerDeg(this.pitch, this.yaw, 0));
+    const hit = Physics.sphereCast(from, 0.28, dir, this.distance);
+    if (!hit || hit.distance > this.distance * 0.75) return;
+    const out = from.clone(); out.y = 0;
+    if (out.lengthSq() < 1) return;                       // on the summit axis: nothing sensible to swing to
+    out.normalize();
+    const outwardYaw = Math.atan2(-out.x, -out.z) * Rad2Deg;   // yaw whose camera offset points away from the mountain
+    this.yaw = moveTowardsAngle(this.yaw, outwardYaw, 160 * dt);
   }
 
   private place(dt: number, snap: boolean) {

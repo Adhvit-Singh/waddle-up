@@ -15,6 +15,8 @@ async function boot() {
   if (import.meta.env.DEV) {
     (window as unknown as { __wu: Game }).__wu = game;
     import('./dev/DevMenu.ts').then(m => m.installDevMenu(game));
+    // test hook: raycast through the game's physics (used by e2e/camera.mjs)
+    import('./physics/Physics.ts').then(m => { (window as unknown as { __wuPhys: unknown }).__wuPhys = (c: never, d: never, len: number) => m.Physics.raycast(c, d, len); });
   }
 }
 boot();
