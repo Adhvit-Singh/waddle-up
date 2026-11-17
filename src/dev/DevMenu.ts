@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { LedgeKind } from '../core/StageData.ts';
 import { yawOf } from '../core/math.ts';
 import type { Game } from '../core/Game.ts';
+import { Input } from '../core/Input.ts';
 import type { TrapType } from '../trolls/TrapDirector.ts';
 
 const TRAPS: TrapType[] = ['Crumble', 'Sneeze', 'Achievement', 'Gust', 'Ice', 'Shy', 'Bounce', 'Snowball', 'CameraFlip', 'Gravity', 'Blackout', 'Trapdoor',
@@ -15,9 +16,15 @@ export function installDevMenu(g: Game) {
   el.style.cssText = 'position:fixed;right:12px;top:12px;z-index:200;background:rgba(10,14,30,.92);color:#fff;font:13px system-ui;padding:10px;border:2px solid #f80;border-radius:8px;max-width:420px;display:none';
   el.innerHTML = '<b>DEV MENU</b> (local only · F10)<br><br>Go to stage:<br>';
   const btn = (label: string, f: () => void) => { const b = document.createElement('button'); b.textContent = label; b.style.margin = '2px'; b.onclick = e => { e.stopPropagation(); f(); }; el.appendChild(b); };
-  for (let s = 0; s < 20; s++) btn(String(s + 1), () => devGotoStage(g, s));
+  // open: the game keeps running and the mouse is free (no pause). Picking something closes it and recaptures the mouse.
+  const setOpen = (open: boolean) => {
+    el.style.display = open ? 'block' : 'none';
+    g.holdUnlocked = open;
+    if (open) Input.unlockPointer(); else if (g.state === 2) Input.lockPointer();
+  };
+  for (let s = 0; s < 20; s++) btn(String(s + 1), () => { devGotoStage(g, s); setOpen(false); });
   el.appendChild(document.createElement('br')); el.appendChild(document.createTextNode('Fire trap here:')); el.appendChild(document.createElement('br'));
-  for (const t of TRAPS) btn(t, () => { const l = g.penguin.groundLedge; if (l) g.traps.forceFire(t, l); });
+  for (const t of TRAPS) btn(t, () => { const l = g.penguin.groundLedge; if (l) g.traps.forceFire(t, l); setOpen(false); });
   document.body.appendChild(el);
   addEventListener('keydown', e => {
     // F8: start of the next stage · F9: last ledge before the current summit
@@ -31,11 +38,11 @@ export function installDevMenu(g: Game) {
       g.cam.snapBehindTarget();
       return;
     }
+    if (e.code === 'Escape' && el.style.display !== 'none') { setOpen(false); return; }   // Esc: close the dev menu, game then pauses as usual
     if (e.code !== 'F10') return;
     e.preventDefault();
-    const open = el.style.display === 'none';
-    el.style.display = open ? 'block' : 'none';
-    if (open && document.pointerLockElement) document.exitPointerLock();
+    if (g.state !== 2 && el.style.display === 'none') return;   // only during play
+    setOpen(el.style.display === 'none');
   });
 }
 
