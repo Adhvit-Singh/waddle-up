@@ -8,6 +8,7 @@ import { Ledge } from './Ledge.ts';
 import { Props } from './Props.ts';
 import type { ParticleSystem } from './Effects.ts';
 import { trimeshCollider } from './WorldDecor.ts';
+import { buildPines } from './Pines.ts';
 
 export interface TierRuntime extends TierInfo { root: THREE.Group; }
 
@@ -29,6 +30,7 @@ export class MountainGenerator {
   private glows: { ps: ParticleSystem; tier: number }[] = [];
   private bodies: { tier: number; body: RAPIER.RigidBody; collider: RAPIER.Collider }[] = [];
   private tierVisible: boolean[] = [];
+  pineCounts: number[] = [];
 
   /** set by the game so StageAtHeight knows how many tiers exist right now */
   tiersRevealed = () => 0;
@@ -70,6 +72,7 @@ export class MountainGenerator {
       this.bodies.push({ tier: b.tier, ...tc });
     }
     for (const c of d.crags) this.buildCrag(c);
+    this.pineCounts = buildPines(d, this.tiers);
     for (let t = 1; t < this.tiers.length; t++) this.setTierActive(t, false);
   }
 
