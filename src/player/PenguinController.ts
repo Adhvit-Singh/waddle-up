@@ -63,6 +63,8 @@ export class PenguinController {
   private climbFrom = new THREE.Vector3();
   private prevPos = new THREE.Vector3(); private currPos = new THREE.Vector3();
   private touching = new Set<number>();
+  /** set by launch(); lets updateMove keep a launch made during the same step (bouncy ledges) */
+  private launched = false;
 
   get locked() { return this.inputLocked || this.state === PState.Ragdoll; }
   get grounded() { return this.state === PState.Ground; }
@@ -187,7 +189,10 @@ export class PenguinController {
 
     const wasAir = this.state === PState.Air;
     if (groundedNow && hit) {
+      this.launched = false;
       if (wasAir) this.onLand(ledge, -this.lastVy);
+      // a bouncy ledge (or anything else) launched us on landing: keep that velocity, don't stand still
+      if (this.launched) return;
       this.groundLedge = ledge;
       this.coyote = 0.11;
       if (this.state === PState.Air) this.state = PState.Ground;
@@ -406,6 +411,7 @@ export class PenguinController {
     if (this.state === PState.Hang || this.state === PState.Climb || this.state === PState.Ground || this.state === PState.Stunned)
       this.state = PState.Air;
     this.body.setLinvel(velocity, true);
+    this.launched = true;
     this.relVel.set(velocity.x, 0, velocity.z);
     this.lastVy = velocity.y;
     this.noGroundUntil = Time.time + noGround;
