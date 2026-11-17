@@ -21,6 +21,8 @@ import { WindSystem } from '../trolls/WindSystem.ts';
 import { TrapDirector } from '../trolls/TrapDirector.ts';
 import { ControlChaos } from '../trolls/ControlChaos.ts';
 import { Taunts } from '../trolls/Taunts.ts';
+import { TrapEffects } from '../trolls/TrapEffects.ts';
+import { seagullAttack } from '../trolls/Seagull.ts';
 import { UIManager, type GameForUI } from '../ui/UIManager.ts';
 import { SequenceDirector } from '../sequences/SequenceDirector.ts';
 
@@ -110,6 +112,7 @@ export class Game implements GameForUI {
     this.penguin.jumped.on(l => this.traps.onJumped(l));
     this.penguin.fell.on(drop => this.traps.onFell(drop));
     this.traps.spawnSnowball = from => spawnSnowball(this.scene, from, this.penguin.collider);
+    this.traps.spawnSeagull = () => seagullAttack(this.scene);
 
     this.chaos = new ControlChaos();
 
@@ -236,6 +239,7 @@ export class Game implements GameForUI {
     this.mountain.resetAllLedges();
     WorldDecor.instance.doomAmount = 0;
     this.seq.cleanup();
+    TrapEffects.reset();
     this.penguin.inputLocked = false;
     this.penguin.gravityScale = 1;
     Time.timeScale = 1;
@@ -395,6 +399,7 @@ export class Game implements GameForUI {
     const tint = css(0.9, 0.95, 1);
     yield* this.ui.fade(1, 0.45, tint);
     this.penguin.teleport(target, yaw);
+    TrapEffects.reset();
     this.lastSafePos.copy(target);
     this.cam.snapBehindTarget();
     this.data.falls++; if (isBottom) this.data.bottomResets++;

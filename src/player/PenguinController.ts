@@ -11,6 +11,7 @@ import type { Ledge } from '../world/Ledge.ts';
 import { AudioManager } from '../audio/AudioManager.ts';
 import { Effects } from '../world/Effects.ts';
 import { Taunts } from '../trolls/Taunts.ts';
+import { TrapEffects } from '../trolls/TrapEffects.ts';
 
 export const PState = { Ground: 0, Air: 1, Hang: 2, Climb: 3, Stunned: 4, Ragdoll: 5 } as const;
 export type PState = (typeof PState)[keyof typeof PState];
@@ -65,6 +66,10 @@ export class PenguinController {
   private touching = new Set<number>();
   /** set by launch(); lets updateMove keep a launch made during the same step (bouncy ledges) */
   private launched = false;
+  private slipUntil = 0;
+  private slipAt = 0;
+  private lastDelayedMove = { x: 0, y: 0 };
+  private delayed: { t: number; m: { x: number; y: number }; jump: boolean; drop: boolean }[] = [];
 
   get locked() { return this.inputLocked || this.state === PState.Ragdoll; }
   get grounded() { return this.state === PState.Ground; }
@@ -114,6 +119,14 @@ export class PenguinController {
         drop ||= gp.pressed(1);
       }
     }
+    // input-delay trap: replay inputs 0.25 s late
+    if (TrapEffects.inputDelayActive) {
+      this.delayed.push({ t: Time.time, m, jump, drop });
+      let out = this.lastDelayedMove, j = false, d = false;
+      while (this.delayed.length && this.delayed[0].t <= Time.time - 0.25) { const e = this.delayed.shift()!; out = e.m; j ||= e.jump; d ||= e.drop; }
+      this.lastDelayedMove = out;
+      m = out; jump = j; drop = d;
+    } else if (this.delayed.length) { this.delayed = []; this.lastDelayedMove = { x: 0, y: 0 }; }
     m = refs.chaos(m);
     const len = Math.hypot(m.x, m.y);
     this.moveInput = len > 1 ? { x: m.x / len, y: m.y / len } : m;
@@ -345,6 +358,7 @@ export class PenguinController {
     this.facing = n.clone().negate();
     AudioManager.play('grab', 0.8);
     AudioManager.setFallLoop(0);
+    if (Time.time < this.slipUntil) { this.slipUntil = 0; this.slipAt = Time.time + 0.35; }
     this.grabbed.emit();
   }
 
@@ -353,6 +367,13 @@ export class PenguinController {
     this.body.setNextKinematicTranslation(this.hangParent.localToWorld(this.hangLocal.clone()));
     this.facing = this.hangFacingLocal.clone().transformDirection(this.hangParent.matrixWorld);
     this.hangTime += dt;
+    if (this.slipAt > 0 && Time.time >= this.slipAt) {
+      this.slipAt = 0;
+      AudioManager.play('scoot', 0.8);
+      refs.ui?.taunt('Butterfingers. Butterflippers?');
+      this.drop();
+      return;
+    }
     if (this.hangTime > GRIP_TIME) {
       refs.ui?.taunt(Taunts.pick(Taunts.GripLost));
       this.drop();
@@ -431,10 +452,14 @@ export class PenguinController {
     this.state = PState.Air;
     this.groundLedge = null;
     this.gravityScale = 1;
+    this.slipUntil = 0; this.slipAt = 0; this.delayed = [];
     this.facing = dirFromYaw(yaw);
     this.body.lockRotations(true, true);
     this.body.setRotation({ x: 0, y: 0, z: 0, w: 1 }, true);
   }
+
+  /** slippery-grab trap: the next grab within `seconds` slips after 0.35 s */
+  slipNextGrab(seconds: number) { this.slipUntil = Time.time + seconds; }
 
   stun(seconds: number) {
     if (this.state === PState.Ragdoll) return;

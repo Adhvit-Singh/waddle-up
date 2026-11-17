@@ -10,6 +10,7 @@ import { AudioManager } from '../audio/AudioManager.ts';
 import { GameSettings } from '../core/GameSettings.ts';
 import { PenguinController, PState } from './PenguinController.ts';
 import type { MountainGenerator } from '../world/MountainGenerator.ts';
+import { TrapEffects } from '../trolls/TrapEffects.ts';
 
 export const CamMode = { Follow: 0, MenuOrbit: 1, Cutscene: 2 } as const;
 export type CamMode = (typeof CamMode)[keyof typeof CamMode];
@@ -31,6 +32,7 @@ export class ThirdPersonCamera {
   private mg: MountainGenerator;
   /** Unity-style camera rotation (+Z forward). three cameras look down −Z, so we keep our own. */
   private rot = new THREE.Quaternion();
+  private trollRoll = 0;
 
   constructor(cam: THREE.PerspectiveCamera, mg: MountainGenerator) {
     ThirdPersonCamera.instance = this;
@@ -83,8 +85,12 @@ export class ThirdPersonCamera {
 
   /** turn the Unity-style rotation (+Z forward) into the three camera orientation (−Z forward) */
   private apply() {
-    const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(this.rot);
-    const up = new THREE.Vector3(0, 1, 0).applyQuaternion(this.rot);
+    // camera-troll trap: roll the view upside down (smoothly in and out)
+    const troll = this.mode === CamMode.Follow ? TrapEffects.activeCameraTroll : null;
+    this.trollRoll = lerp(this.trollRoll, troll?.kind === 'roll' ? 180 : 0, 1 - Math.exp(-8 * Time.unscaledDeltaTime));
+    const r = this.trollRoll > 0.5 ? this.rot.clone().multiply(eulerDeg(0, 0, this.trollRoll)) : this.rot;
+    const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(r);
+    const up = new THREE.Vector3(0, 1, 0).applyQuaternion(r);
     this.cam.up.copy(up);
     this.cam.lookAt(this.cam.position.clone().add(fwd));
     this.cam.updateMatrixWorld();
@@ -140,7 +146,8 @@ export class ThirdPersonCamera {
     let fall = 0;
     const pc = PenguinController.instance;
     if (pc && pc.state === PState.Air) fall = inverseLerp(12, 35, -pc.velocity.y);
-    this.setFov(lerp(this.cam.fov, 60 + fall * 14, snap ? 1 : dt * 3));
+    const zoom = TrapEffects.activeCameraTroll?.kind === 'zoom';
+    this.setFov(lerp(this.cam.fov, zoom ? 24 : 60 + fall * 14, snap ? 1 : dt * (zoom ? 10 : 3)));
   }
 
   private setFov(f: number) {

@@ -9,8 +9,10 @@ import { AudioManager } from '../audio/AudioManager.ts';
 import { Taunts } from './Taunts.ts';
 import { SaveSystem } from '../core/SaveSystem.ts';
 import type { Ledge } from '../world/Ledge.ts';
+import { TrapEffects } from './TrapEffects.ts';
 
-export type TrapType = 'None' | 'Crumble' | 'Sneeze' | 'Gust' | 'Ice' | 'Shy' | 'Bounce' | 'Snowball' | 'CameraFlip' | 'Gravity' | 'Blackout' | 'Trapdoor' | 'Achievement' | 'External';
+export type TrapType = 'None' | 'Crumble' | 'Sneeze' | 'Gust' | 'Ice' | 'Shy' | 'Bounce' | 'Snowball' | 'CameraFlip' | 'Gravity' | 'Blackout' | 'Trapdoor' | 'Achievement' | 'External'
+  | 'Seagull' | 'FallThrough' | 'Tilt' | 'SlipGrab' | 'CameraTroll' | 'InputDelay' | 'FakeCrash' | 'FakeSave';
 
 interface TrapDef { type: TrapType; minStage: number; weight: number; }
 
@@ -28,6 +30,19 @@ const DEFS: TrapDef[] = [
   { type: 'Blackout', minStage: 8, weight: 0.6 },
   { type: 'Trapdoor', minStage: 9, weight: 0.12 },
 ];
+
+/** Round 2 traps (minStage is the 0-based stage index: 1 = stage 2). */
+export const NEW_TRAPS: TrapDef[] = [
+  { type: 'Seagull', minStage: 1, weight: 1.0 },
+  { type: 'FallThrough', minStage: 2, weight: 0.8 },
+  { type: 'Tilt', minStage: 2, weight: 0.9 },
+  { type: 'SlipGrab', minStage: 3, weight: 0.7 },
+  { type: 'CameraTroll', minStage: 4, weight: 0.6 },
+  { type: 'InputDelay', minStage: 5, weight: 0.6 },
+  { type: 'FakeCrash', minStage: 6, weight: 0.35 },
+  { type: 'FakeSave', minStage: 7, weight: 0.35 },
+];
+DEFS.push(...NEW_TRAPS);
 
 const COOLDOWN = 4;
 
@@ -57,6 +72,8 @@ export class TrapDirector {
   lastFired: { type: TrapType; ledge: number } | null = null;
   private getLedge: (i: number) => Ledge | null;
   spawnSnowball: SnowballSpawner = () => {};
+  /** injected by the game: seagull attack (needs the scene) */
+  spawnSeagull: () => void = () => {};
 
   constructor(getLedge: (i: number) => Ledge | null) {
     TrapDirector.instance = this;
@@ -112,10 +129,22 @@ export class TrapDirector {
     this.fire(type, l);
   }
 
+  /** trap types that may fire on this ledge right now (tests + dev menu) */
+  candidateTypes(l: Ledge): TrapType[] { return this.candidates(l).map(c => c.type); }
+
   private pickTrap(l: Ledge): TrapType {
-    let total = 0;
+    const cands = this.candidates(l);
+    if (cands.length === 0) return 'None';
+    const total = cands.reduce((a, c) => a + c.weight, 0);
+    let r = UnityRandom.value() * total;
+    for (const c of cands) { r -= c.weight; if (r <= 0) return c.type; }
+    return cands[cands.length - 1].type;
+  }
+
+  private candidates(l: Ledge): TrapDef[] {
     const cands: TrapDef[] = [];
     for (const d of DEFS) {
+      if (d.type === 'FallThrough' && this.lastFired?.type === 'FallThrough') continue; // never twice in a row
       if (l.stage < d.minStage) continue;
       if (this.isBanned(l.index, d.type)) continue;
       const k = TrapDirector.key(l.index, d.type);
@@ -126,12 +155,8 @@ export class TrapDirector {
       if (d.type === 'Gust' || d.type === 'Shy' || d.type === 'Crumble') w *= 1 + l.stage * 0.05;
       if (d.type === 'Achievement' || d.type === 'Sneeze') w *= lerp(1.3, 0.5, l.stage / 19);
       cands.push({ type: d.type, minStage: d.minStage, weight: w });
-      total += w;
     }
-    if (cands.length === 0) return 'None';
-    let r = UnityRandom.value() * total;
-    for (const c of cands) { r -= c.weight; if (r <= 0) return c.type; }
-    return cands[cands.length - 1].type;
+    return cands;
   }
 
   private applicable(t: TrapType, l: Ledge) {
@@ -144,9 +169,17 @@ export class TrapDirector {
       }
       case 'Snowball': return this.getLedge(l.index + 3) != null;
       case 'Trapdoor': return Time.time - this.lastTrapdoorTime > 600;
+      case 'FallThrough': {
+        const next = this.getLedge(l.index + 1);
+        return next != null && !next.isDynamic && next.kind !== LedgeKind.Rest && next.stage === l.stage;
+      }
+      case 'Tilt': return !l.isDynamic && l.canCrumble && (l.kind === LedgeKind.Normal || l.kind === LedgeKind.Beam || l.kind === LedgeKind.Ice || l.kind === LedgeKind.Wall);
       default: return true;
     }
   }
+
+  /** fire a specific trap now (dev menu / tests) */
+  forceFire(type: TrapType, l: Ledge) { this.fire(type, l); }
 
   private fire(type: TrapType, l: Ledge) {
     this.fired.add(TrapDirector.key(l.index, type));
@@ -242,11 +275,67 @@ export class TrapDirector {
         else this.lastTrapdoorTime = -9999;
         break;
 
+      case 'Seagull':
+        this.spawnSeagull();
+        break;
+
+      case 'FallThrough': {
+        const next = this.getLedge(l.index + 1);
+        if (next) next.ghost(6);
+        break;
+      }
+
+      case 'Tilt':
+        l.tilt(25, 1.5);
+        break;
+
+      case 'SlipGrab':
+        refs.penguin?.slipNextGrab(6);
+        ui?.toast('Your flippers feel... greasy.', css(0.85, 0.95, 0.7), 1.2);
+        break;
+
+      case 'CameraTroll': {
+        const kind = UnityRandom.value() < 0.5 ? 'zoom' : 'roll';
+        TrapEffects.startCameraTroll(kind, 3);
+        AudioManager.play('whoosh', 0.7);
+        ui?.taunt(kind === 'zoom' ? 'Enhance. ENHANCE.' : 'Australia mode activated.');
+        break;
+      }
+
+      case 'InputDelay':
+        TrapEffects.startInputDelay(4);
+        AudioManager.play('warn', 0.5);
+        ui?.toast('connection unstable (lag: 250 ms)', css(1, 0.85, 0.3), 3.5);
+        break;
+
+      case 'FakeCrash':
+        yield* this.fakeCrash();
+        break;
+
+      case 'FakeSave':
+        AudioManager.play('powerdown', 0.7);
+        ui?.fakeSave(true);
+        yield { realtime: 2.2 };
+        ui?.fakeSave(false);
+        ui?.toast("relax. it's fine. your save is fine.", css(0.7, 0.76, 0.86), 1.6);
+        break;
+
       case 'Achievement':
         AudioManager.play('achievement', 0.7);
         ui?.achievement(Taunts.pick(Taunts.Achievements));
         break;
     }
+  }
+
+  private *fakeCrash(): Co {
+    const ui = refs.ui;
+    ui?.fakeCrash(true);
+    const before = Time.timeScale;
+    Time.timeScale = 0;                       // the game really freezes behind the fake dialog
+    yield { realtime: 2.5 };
+    ui?.fakeCrash(false);
+    if (refs.game?.isPlaying && Time.timeScale === 0) Time.timeScale = before || 1;
+    ui?.taunt('...just kidding.');
   }
 
   onJumped(from: Ledge | null) {

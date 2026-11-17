@@ -54,6 +54,8 @@ export class UIManager {
   private credits!: HTMLElement; private confirmEl!: HTMLElement; private stats!: HTMLElement; private fakeWin!: HTMLElement;
   private fadeEl!: HTMLElement; private blackoutEl!: HTMLElement; private blackoutText!: Txt;
   private fadeA = 1; private fadeColor = 'rgb(0,0,0)';
+  private crashEl!: HTMLElement; private crashDots!: Txt; private saveEl!: HTMLElement; private saveFill!: HTMLElement;
+  private crashOn = false; private saveOn = false; private saveT = 0;
 
   // HUD
   private stageText!: Txt; private timerText!: Txt; private fallsText!: Txt; private heightText!: Txt; private hintText!: Txt;
@@ -282,6 +284,34 @@ export class UIManager {
     this.blackoutEl.classList.add('blackout');
     this.blackoutEl.style.background = 'rgba(0,0,0,0)';
     this.blackoutText = text('T', this.blackoutEl, [1, 0], [-170, 50], [300, 40], '', 22, css(0.4, 1, 0.4, 0.8), 'mr');
+    // ---- fake "stopped working" dialog (FakeCrash trap)
+    this.crashEl = stretch('FakeCrash', this.root);
+    this.crashEl.style.background = 'rgba(255,255,255,0.18)';
+    const dlg = panel('Dialog', this.crashEl, [0.5, 0.5], [0, 0], [820, 330], '#f3f3f3');
+    dlg.style.borderRadius = '6px';
+    const bar = rect('Bar', dlg, [0.5, 1], [0, -26], [820, 52]); bar.style.background = '#ffffff'; bar.style.borderBottom = '1px solid #ddd';
+    text('T', bar, [0, 0.5], [24, 0], [600, 40], 'Waddle Up (Not Responding)', 24, '#222', 'ml').classList.remove('outline');
+    place(bar.lastElementChild as HTMLElement, [0, 0.5], [24, 0], [600, 40], [0, 0.5]);
+    const msg = text('Msg', dlg, [0.5, 0.5], [0, 30], [740, 120], 'Waddle Up has stopped working.\nThe penguin is looking for a solution to the problem', 28, '#222', 'ml');
+    msg.classList.remove('outline');
+    this.crashDots = text('Dots', dlg, [0.5, 0.5], [0, -30], [740, 40], '', 28, '#222', 'ml');
+    this.crashDots.classList.remove('outline');
+    const fakeBtn = rect('Close', dlg, [1, 0], [-30, 30], [280, 56], [1, 0]);
+    fakeBtn.style.background = '#e1e1e1'; fakeBtn.style.border = '1px solid #adadad';
+    label(fakeBtn, 'Close the program', 24, '#222', 'mc', '', false);
+    show(this.crashEl, false);
+
+    // ---- fake "save corrupted" banner (FakeSave trap)
+    this.saveEl = stretch('FakeSave', this.root);
+    this.saveEl.style.background = 'rgba(40,0,0,0.35)';
+    const sp = panel('Box', this.saveEl, [0.5, 0.5], [0, 60], [1100, 300], 'rgba(30,8,10,0.94)');
+    sp.style.border = '3px solid rgb(230,60,60)';
+    text('T', sp, [0.5, 1], [0, -70], [1000, 90], 'SAVE FILE CORRUPTED', 72, 'rgb(255,80,80)', 'mc', 'b');
+    text('S', sp, [0.5, 0.5], [0, -5], [1000, 50], 'All progress lost. Returning to stage 1...', 34, '#fff', 'mc');
+    const pb = image(rect('Bar', sp, [0.5, 0], [0, 60], [900, 26]), 'rgba(255,255,255,0.15)');
+    this.saveFill = image(rect('Fill', pb, [0, 0.5], [0, 0], [0, 26], [0, 0.5]), 'rgb(230,60,60)');
+    show(this.saveEl, false);
+
     this.fadeEl = stretch('Fade', this.root);
     this.fadeEl.classList.add('fade');
     this.setFade(1);
@@ -315,6 +345,11 @@ export class UIManager {
     this.fadeEl.style.background = color;
     this.fadeEl.style.opacity = String(a);
   }
+
+  /** FakeCrash trap overlay */
+  fakeCrash(on: boolean) { this.crashOn = on; show(this.crashEl, on); }
+  /** FakeSave trap overlay (purely visual: never touches the save) */
+  fakeSave(on: boolean) { this.saveOn = on; this.saveT = 0; show(this.saveEl, on); }
 
   // =================================================================== MENU
 
@@ -651,6 +686,8 @@ export class UIManager {
 
   update() {
     this.updateHUD();
+    if (this.crashOn) this.crashDots.set('.'.repeat(1 + (Math.floor(Time.unscaledTime * 2) % 3)));
+    if (this.saveOn) { this.saveT += Time.unscaledDeltaTime; this.saveFill.style.width = `${900 * Math.min(1, this.saveT / 1.8)}px`; }
     // title bobber
     if (this.titleRt && shown(this.menu)) {
       const ut = Time.unscaledTime;

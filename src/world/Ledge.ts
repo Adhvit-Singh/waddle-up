@@ -48,6 +48,9 @@ export class Ledge {
   sweeperCollider: RAPIER.Collider | null = null;
   private chevrons: THREE.Object3D[] | null = null;
   private tierActive = true;
+  private ghostUntil = 0;
+  private ghostMat: THREE.MeshLambertMaterial | null = null;
+  private tilting = false;
 
   get isIcy() { return this.kind === LedgeKind.Ice || Time.time < this.icyUntil; }
   get isDynamic() { return this.kind === LedgeKind.Moving || this.kind === LedgeKind.Rotating; }
@@ -207,6 +210,18 @@ export class Ledge {
         this.chevrons[i].position.set(0, 0.025, z);
       }
     }
+    // fall-through trap: intangible but still visible (a faint shimmer is the only hint)
+    if (this.ghostUntil > 0) {
+      const pc = refs.penguin;
+      const passed = pc != null && pc.position.y < this.position.y - 2.5;
+      if (Time.time >= this.ghostUntil || passed) { this.ghostUntil = 0; if (this.solid) this.box.setEnabled(this.tierActive); }
+    }
+    if (this.ghostUntil > 0) {
+      if (!this.ghostMat) { this.ghostMat = Mats.vertexColorInstance(col(1, 1, 1)); this.ghostMat.transparent = true; }
+      this.ghostMat.opacity = 0.82 + Math.sin(Time.time * 9) * 0.12;
+      if (this.visual.material !== this.ghostMat) this.visual.material = this.ghostMat;
+      return;
+    }
     // ice tint
     const tempIce = Time.time < this.icyUntil && this.kind !== LedgeKind.Ice;
     const want = tempIce ? (sharedIceMat ??= iceTintMat()) : this.baseMat;
@@ -263,6 +278,47 @@ export class Ledge {
   }
 
   makeIcy(duration: number) { this.icyUntil = Time.time + duration; }
+
+  /** Fall-through trap: the ledge stays visible but you pass straight through it (until you're below it, or timeout). */
+  ghost(seconds: number) {
+    if (this.isDynamic || !this.solid) return;
+    this.ghostUntil = Time.time + seconds;
+    this.box.setEnabled(false);
+  }
+
+  /** Tilt trap: wobble warning, then tip the outer edge down and drift the penguin outward, then come back. */
+  tilt(deg: number, hold: number) {
+    if (this.isDynamic || this.tilting || this.crumbling) return;
+    Scheduler.start(this, this.tiltRoutine(deg, hold));
+  }
+
+  private *tiltRoutine(deg: number, hold: number): Co {
+    this.tilting = true;
+    AudioManager.playAt('crumble', this.position, 0.5);
+    let t = 0;
+    while (t < 0.4) { t += Time.deltaTime; this.visual.position.set(0, 0, Math.sin(t * 70) * 0.04); yield null; }
+    this.visual.position.set(0, 0, 0);
+    const outward = this.right; outward.y = 0; outward.normalize();
+    const pose = (a: number) => {
+      // rotate about the inner top edge (local x = -size.x/2) around the path direction, outer edge going down
+      const q = this.baseRot.clone().multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), -a * Math.PI / 180));
+      const edge = new THREE.Vector3(-this.size.x / 2, 0, 0);
+      const off = edge.clone().applyQuaternion(this.baseRot).sub(edge.clone().applyQuaternion(q));
+      this.object.quaternion.copy(q);
+      this.object.position.copy(this.basePos).add(off);
+      this.syncBodies();
+    };
+    t = 0;
+    while (t < 0.25) { t += Time.deltaTime; pose(deg * Math.min(1, t / 0.25)); yield null; }
+    const baseConv = this.conveyor.clone();
+    this.conveyor.copy(baseConv).addScaledVector(outward, 3);
+    yield hold;
+    this.conveyor.copy(baseConv);
+    t = 0;
+    while (t < 0.5) { t += Time.deltaTime; pose(deg * (1 - Math.min(1, t / 0.5))); yield null; }
+    this.object.position.copy(this.basePos); this.object.quaternion.copy(this.baseRot); this.syncBodies();
+    this.tilting = false;
+  }
 
   get canCrumble() { return this.solid && !this.crumbling && !this.isDynamic && this.kind !== LedgeKind.Blink; }
 
@@ -324,7 +380,8 @@ export class Ledge {
     if (this.sweeperArm) this.sweeperArm.quaternion.identity();
     this.syncBodies();
     this.visual.position.set(0, 0, 0); this.visual.quaternion.identity(); this.visual.scale.set(1, 1, 1);
-    this.crumbling = false; this.standTimer = 0; this.icyUntil = 0;
+    this.crumbling = false; this.standTimer = 0; this.icyUntil = 0; this.ghostUntil = 0; this.tilting = false;
+    if (this.kind === LedgeKind.Conveyor) this.conveyor = this.forward.multiplyScalar(-2.4); else this.conveyor.set(0, 0, 0);
     this.solid = false; this.setSolid(true);
     this.visual.visible = true;
   }

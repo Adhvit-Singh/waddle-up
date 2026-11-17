@@ -14,6 +14,7 @@ export interface PenguinRef {
   readonly position: THREE.Vector3;
   readonly object: THREE.Object3D;
   launch(velocity: THREE.Vector3, noGround: number): void;
+  slipNextGrab(seconds: number): void;
 }
 
 export interface GameRef {
@@ -31,6 +32,8 @@ export interface UIRef {
   blackout(secs: number, text: string): void;
   setChaosWarning(on: boolean): void;
   setChaos(on: boolean, mode: number): void;
+  fakeCrash(on: boolean): void;
+  fakeSave(on: boolean): void;
 }
 
 export const refs = {
