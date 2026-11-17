@@ -64,7 +64,7 @@ export class MountainGenerator {
     for (const g of d.glows) this.glows.push({ ps: Props.glow(g.pos, g.color!), tier: g.tier });
     for (const b of d.bodies) {
       meshObject('MountainBody', b.mesh.build(), this.tiers[b.tier].root);
-      const tc = trimeshCollider(b.mesh, { mountain: b.tier });
+      const tc = trimeshCollider(b.mesh, { mountain: b.tier, object: this.tiers[b.tier].root });
       this.bodies.push({ tier: b.tier, ...tc });
     }
     for (let t = 1; t < this.tiers.length; t++) this.setTierActive(t, false);

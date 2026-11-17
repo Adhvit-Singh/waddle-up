@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { Time, FixedStepper } from './time.ts';
 import { Loop } from './loop.ts';
 import { Scheduler } from './coroutines.ts';
@@ -8,6 +7,11 @@ import { Physics } from '../physics/Physics.ts';
 import { MountainGenerator } from '../world/MountainGenerator.ts';
 import { WorldDecor } from '../world/WorldDecor.ts';
 import { Effects } from '../world/Effects.ts';
+import { Input } from './Input.ts';
+import { GameSettings } from './GameSettings.ts';
+import { PenguinController } from '../player/PenguinController.ts';
+import { PenguinVisual } from '../player/PenguinVisual.ts';
+import { ThirdPersonCamera, CamMode } from '../player/ThirdPersonCamera.ts';
 
 /** Owns renderer, scene, physics and the Unity-style frame loop. */
 export class Game {
@@ -19,7 +23,9 @@ export class Game {
   decor!: WorldDecor;
   private stepper = new FixedStepper(0.02);
   private last = 0;
-  private debugControls: OrbitControls | null = null;
+  penguin!: PenguinController;
+  cam!: ThirdPersonCamera;
+  playing = false;
 
   constructor(canvas: HTMLCanvasElement) {
     Game.instance = this;
@@ -42,14 +48,22 @@ export class Game {
     this.decor = new WorldDecor(this.scene, this.mountain);
     this.decor.build();
 
-    // temporary viewer (Task 3): orbit the mountain
+    GameSettings.load();
+    Input.init(this.renderer.domElement);
+    this.penguin = new PenguinController(this.scene);
+    new PenguinVisual(this.penguin);
+    this.penguin.teleport(this.mountain.spawnPoint, this.mountain.spawnYaw);
     this.camera.position.set(0, 60, -200);
-    this.debugControls = new OrbitControls(this.camera, this.renderer.domElement);
-    this.debugControls.target.set(0, 45, 0);
-    const follow = new THREE.Object3D();
-    follow.position.copy(this.mountain.spawnPoint);
-    this.scene.add(follow);
-    Effects.snowFall(follow);
+    this.cam = new ThirdPersonCamera(this.camera, this.mountain);
+    this.cam.target = this.penguin.object;
+    Effects.snowFall(this.penguin.object);
+
+    // temporary (Task 4): straight into play, click to capture the mouse
+    const game = this;
+    refs.game = { get isPlaying() { return game.playing; }, currentStage: 0, sendToBottom: () => this.penguin.teleport(this.mountain.spawnPoint, this.mountain.spawnYaw) };
+    this.playing = true;
+    this.cam.mode = CamMode.Follow;
+    this.cam.snapBehindTarget();
   }
 
   resize() {
@@ -76,14 +90,17 @@ export class Game {
 
     if (Time.timeScale > 0) {
       const steps = this.stepper.stepsFor(Time.deltaTime);
-      for (let i = 0; i < steps; i++) { Loop.fixed(); Physics.world.step(); }
+      for (let i = 0; i < steps; i++) { Loop.fixed(); Physics.world.step(); this.penguin.afterStep(); }
     }
+    refs.alpha = this.stepper.alpha;
+    Input.pollGamepad();
+    if (this.playing && !Input.isLocked && Input.mouseClicked) Input.lockPointer();
     Loop.update();
     Scheduler.update();
-    this.debugControls?.update();
     Loop.late();
     Effects.update(Time.deltaTime);
-    this.decor.focusShadows(this.debugControls ? this.debugControls.target : this.camera.position);
+    this.decor.focusShadows(this.penguin.object.position);
     this.renderer.render(this.scene, this.camera);
+    Input.endFrame();
   }
 }

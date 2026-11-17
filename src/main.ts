@@ -12,5 +12,6 @@ async function boot() {
   game.init();
   document.getElementById('loading')?.remove();
   game.start();
+  if (import.meta.env.DEV) (window as unknown as { __wu: Game }).__wu = game;
 }
 boot();
