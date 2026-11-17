@@ -82,9 +82,6 @@ test('mountain stays light enough to render fast', () => {
   for (const b of m.bodies) assert.ok(b.mesh.vertexCount / 3 > 3000, `tier ${b.tier} still low detail`);
 });
 
-// these 3 tight spots exist in the original Unity layout (top tier, unchanged); reported to the user, not silently changed
-const KNOWN_UNITY_TIGHT = new Set(['254/241', '259/247', '259/248']);
-
 test('headroom: no ledge hangs lower than 2.6 m above a ledge it overlaps (penguin 1.12 m + jump 1.43 m)', () => {
   let worst = 99, where = '';
   const span = (l: (typeof m.ledges)[number]) => {
@@ -97,8 +94,37 @@ test('headroom: no ledge hangs lower than 2.6 m above a ledge it overlaps (pengu
     const overlap = [-2 * Math.PI, 0, 2 * Math.PI].some(k => b0 + k < a1 && b1 + k > a0);
     if (!overlap) continue;
     const clear = (b.pos.y - b.size.y) - a.pos.y;
-    if (KNOWN_UNITY_TIGHT.has(`${b.index}/${a.index}`)) continue;
     if (clear < worst) { worst = clear; where = `ledge ${b.index} over ${a.index}`; }
   }
   assert.ok(worst >= 2.6, `only ${worst.toFixed(2)} m clearance (${where})`);
+});
+
+test('no skip routes: from any ledge you cannot jump+grab a ledge more than 2 further along the path', () => {
+  const JUMP_UP = 1.43 + 2.05, H_REACH = 5.2;
+  const bad: string[] = [];
+  for (const a of m.ledges) for (const b of m.ledges) {
+    if (a.tier !== b.tier || b.index <= a.index + 2) continue;
+    const up = b.pos.y - a.pos.y;
+    if (up <= 0 || up > JUMP_UP) continue;
+    const d = Math.max(0, Math.hypot(a.pos.x - b.pos.x, a.pos.z - b.pos.z) - Math.hypot(a.size.x, a.size.z) / 2 - Math.hypot(b.size.x, b.size.z) / 2);
+    if (d <= H_REACH) bad.push(`${a.index}->${b.index}`);
+  }
+  assert.deepEqual(bad, []);
+});
+
+test('fake summits: flag, cutscene spot and rim crags are all clear of the tier that rises out of the plateau', () => {
+  for (let t = 0; t < 2; t++) {
+    const tier = m.tiers[t];
+    // widest the next tier's rock gets near the plateau
+    const p = m.bodies.find(b => b.tier === t + 1)!.mesh.positions();
+    let rising = 0;
+    for (let i = 0; i < p.length; i += 3) if (p[i + 1] < tier.topY + 3) rising = Math.max(rising, Math.hypot(p[i], p[i + 2]));
+    const flagR = Math.hypot(tier.flagPos.x, tier.flagPos.z);
+    assert.ok(flagR - rising >= 1.0, `tier ${t}: flag only ${(flagR - rising).toFixed(2)} m from the rising rock`);
+    assert.ok(flagR <= tier.rTop - 1.0, `tier ${t}: flag too close to the rim`);
+    for (const c of m.crags.filter(c => c.tier === t)) {
+      const inner = Math.hypot(c.pos.x, c.pos.z) - c.radius * 1.35;
+      assert.ok(inner >= rising + 0.3, `tier ${t}: a crag reaches into the rising rock (${inner.toFixed(2)} vs ${rising.toFixed(2)})`);
+    }
+  }
 });

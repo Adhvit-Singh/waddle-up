@@ -19,6 +19,9 @@ export default async function (t) {
     check(await until('__wu.state === 4', 15000), `fake summit ${i + 1} starts`);
     if (i === 0) { await until(`document.querySelector('[data-name="Nope"]')?.innerText.includes('NOPE')`, 30000); await t.shot('summit-nope'); }
     check(await until(`__wu.data.tiersRevealed === ${i + 1} && __wu.state === 2`, 120000), `tier ${i + 2} rose and play resumed`);
+    const where = JSON.parse(await t.eval(`(() => { const g = __wu, p = g.penguin.position, T = g.mountain.tiers;
+      return JSON.stringify({ y: p.y, top: T[${i}].topY, r: Math.hypot(p.x, p.z), rim: T[${i}].rTop, rising: T[${i + 1}].rBase + 1.1, state: g.penguin.state }); })()`));
+    check(Math.abs(where.y - where.top) < 0.6 && where.r > where.rising && where.r < where.rim, `penguin stands on plateau ${i + 1} after the rise (y ${where.y.toFixed(1)} vs top ${where.top.toFixed(1)}, r ${where.r.toFixed(1)} between ${where.rising.toFixed(1)} and ${where.rim})`);
     const y = await t.eval(`__wu.mountain.tiers[${i + 1}].root.position.y`);
     check(Math.abs(y) < 1e-6, `tier ${i + 2} (with its pines/crags) settled at its final height`);
     await t.shot(`summit-after-${i + 1}`);

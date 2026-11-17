@@ -10,6 +10,13 @@ export const JUMP_V = 5.3, MOVE_SPEED = 4.6, G = 9.81;
 
 const f = Math.fround;
 
+/** tier widths (round 3): each fake-summit plateau keeps a >= 4.5 m ring outside the tier that rises out of it, and the
+ *  top tier is wide enough that its trail loops are too far apart to grab (no skips, no low ceilings) */
+const TIER_TOP = [27.5, 19, 8.5];
+const TIER_BASE = [NaN, 23, 14.5];      // tier 0's base follows from its height
+/** how far the next tier's rock can reach at its base: base radius + base ring (0.8) + max bulge/jitter (0.3) */
+const risingRadius = (t: number) => TIER_BASE[t + 1] + 1.1;
+
 export class TierInfo {
   index = 0;
   baseY = 0; topY = 0; rBase = 0; rTop = 0;
@@ -130,9 +137,9 @@ export function generateMountain(): MountainData {
     switch (t) {
       // round 2: tiers taper much more so the mountain reads as a peak, not a cylinder (jumps are unchanged: gaps and
       // rises come from the step list, the radius only sets how tightly the trail winds)
-      case 0: tier.rTop = 22; tier.rBase = tier.rTop + tier.height * 0.38; break;
-      case 1: tier.rBase = 21; tier.rTop = 12.5; break;
-      default: tier.rBase = 11.5; tier.rTop = 5.5; break;
+      case 0: tier.rTop = TIER_TOP[0]; tier.rBase = tier.rTop + tier.height * 0.38; break;
+      case 1: tier.rBase = TIER_BASE[1]; tier.rTop = TIER_TOP[1]; break;
+      default: tier.rBase = TIER_BASE[2]; tier.rTop = TIER_TOP[2]; break;
     }
 
     // ---------- 3. place the ledges along the spiral
@@ -171,15 +178,17 @@ export function generateMountain(): MountainData {
       const n = t === 0 ? 14 : 9;
       for (let k = 0; k < n; k++) {
         const a = tier.arrivalAngle + 1.0 + (2 * Math.PI - 2.0) * (k + 0.5) / n + (noise3(k, t, 1, SEED) - 0.5) * 0.25;
-        const rr = tier.rTop - 1.2 - noise3(k, t, 2, SEED) * 1.5;
+        // on the rim edge, sized so they never reach in to where the next tier rises
+        const rr = tier.rTop + 0.3;
+        const maxRadius = (rr - (risingRadius(t) + 0.3)) / 1.35;
         const h = (t === 0 ? 4 : 3) + noise3(k, t, 3, SEED) * (t === 0 ? 7 : 4);
-        out.crags.push({ tier: t, pos: new THREE.Vector3(Math.cos(a) * rr, tier.topY - 0.3, Math.sin(a) * rr), height: h, radius: 1.4 + h * 0.22, seed: SEED + t * 100 + k });
+        out.crags.push({ tier: t, pos: new THREE.Vector3(Math.cos(a) * rr, tier.topY - 0.3, Math.sin(a) * rr), height: h, radius: Math.min(1.4 + h * 0.22, maxRadius), seed: SEED + t * 100 + k });
       }
     }
 
     // ---------- 5. summit flag
     if (t < TIER_COUNT - 1) {
-      const fr = tier.rTop - 2.6;
+      const fr = (tier.rTop + risingRadius(t)) / 2;       // middle of the free ring: clear of the rising tier and the rim
       const fa = tier.arrivalAngle + 0.08;
       tier.flagPos = new THREE.Vector3(Math.cos(fa) * fr, tier.topY, Math.sin(fa) * fr);
       out.flags.push({ tier: t, pos: tier.flagPos.clone(), height: 4.2, color: col(1, 0.85, 0.2), label: 'SUMMIT!', labelScale: 1.4, checkpointStage: null });

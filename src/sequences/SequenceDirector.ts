@@ -63,7 +63,8 @@ export class SequenceDirector {
     const flag = tier.flagPos.clone();
     const outward = V(flag.x, 0, flag.z).normalize();
     const side = V().crossVectors(V(0, 1, 0), outward);
-    const stand = flag.clone().addScaledVector(outward, -0.2).addScaledVector(side, 1.4).add(V(0, 0.1, 0));
+    // beside the flag, along the free ring of the plateau (the next tier rises inside this ring)
+    const stand = flag.clone().addScaledVector(side, 1.4).add(V(0, 0.1, 0));
     pc.teleport(stand, Math.atan2(-outward.x, -outward.z) * Rad2Deg);
     pc.inputLocked = true;
 
