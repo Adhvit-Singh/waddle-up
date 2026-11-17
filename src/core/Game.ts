@@ -1,32 +1,65 @@
 import * as THREE from 'three';
 import { Time, FixedStepper } from './time.ts';
 import { Loop } from './loop.ts';
-import { Scheduler } from './coroutines.ts';
+import { Scheduler, type Co } from './coroutines.ts';
 import { refs } from './refs.ts';
+import { Input } from './Input.ts';
+import { GameSettings } from './GameSettings.ts';
+import { SaveSystem, newSaveData, type SaveData } from './SaveSystem.ts';
+import { css, yawOf } from './math.ts';
+import { LedgeKind } from './StageData.ts';
 import { Physics } from '../physics/Physics.ts';
+import { AudioManager } from '../audio/AudioManager.ts';
 import { MountainGenerator } from '../world/MountainGenerator.ts';
 import { WorldDecor } from '../world/WorldDecor.ts';
 import { Effects } from '../world/Effects.ts';
-import { Input } from './Input.ts';
-import { AudioManager } from '../audio/AudioManager.ts';
-import { GameSettings } from './GameSettings.ts';
-import { PenguinController } from '../player/PenguinController.ts';
+import { FakeCheckpoint, ShortcutFish, spawnSnowball } from '../world/Interactables.ts';
+import { PenguinController, PState } from '../player/PenguinController.ts';
 import { PenguinVisual } from '../player/PenguinVisual.ts';
 import { ThirdPersonCamera, CamMode } from '../player/ThirdPersonCamera.ts';
+import { WindSystem } from '../trolls/WindSystem.ts';
+import { TrapDirector } from '../trolls/TrapDirector.ts';
+import { ControlChaos } from '../trolls/ControlChaos.ts';
+import { Taunts } from '../trolls/Taunts.ts';
+import { UIManager, type GameForUI } from '../ui/UIManager.ts';
+import { SequenceDirector } from '../sequences/SequenceDirector.ts';
 
-/** Owns renderer, scene, physics and the Unity-style frame loop. */
-export class Game {
+export const GState = { Boot: 0, Menu: 1, Playing: 2, Paused: 3, Cutscene: 4, Ending: 5 } as const;
+export type GState = (typeof GState)[keyof typeof GState];
+
+/**
+ * Bootstraps the whole game (everything is built from code), owns game state, stats, saving,
+ * stage tracking, falls and the summit triggers. Port of GameManager.cs plus the render/physics loop.
+ */
+export class Game implements GameForUI {
   static instance: Game;
   renderer: THREE.WebGLRenderer;
   scene = new THREE.Scene();
   camera = new THREE.PerspectiveCamera(60, 1, 0.1, 2500);
+  state: GState = GState.Boot;
+  get isPlaying() { return this.state === GState.Playing; }
+
+  data: SaveData = newSaveData();
+  currentStage = 0;
+  get tiersRevealed() { return this.data.tiersRevealed; }
+
   mountain!: MountainGenerator;
   decor!: WorldDecor;
-  private stepper = new FixedStepper(0.02);
-  private last = 0;
   penguin!: PenguinController;
   cam!: ThirdPersonCamera;
-  playing = false;
+  ui!: UIManager;
+  traps!: TrapDirector;
+  chaos!: ControlChaos;
+  seq!: SequenceDirector;
+
+  private stepper = new FixedStepper(0.02);
+  private last = 0;
+  private autosave = 0; private idle = 0; private lastBannerTime = -999;
+  private lastBannerStage = -1;
+  private lastSafePos = new THREE.Vector3();
+  private lastSafeYaw = 0;
+  private sendingToBottom = false;
+  private hadPointerLock = false;
 
   constructor(canvas: HTMLCanvasElement) {
     Game.instance = this;
@@ -38,35 +71,85 @@ export class Game {
     this.scene.userData.camera = this.camera;
     refs.camera = this.camera;
     addEventListener('resize', () => this.resize());
-    this.resize();
   }
 
-  init() {
-    Physics.init();
-    Effects.setScene(this.scene);
-    this.mountain = new MountainGenerator(this.scene);
-    this.mountain.generate();
-    this.decor = new WorldDecor(this.scene, this.mountain);
-    this.decor.build();
+  // ------------------------------------------------------------------ Awake
 
+  init() {
     GameSettings.load();
     Input.init(this.renderer.domElement);
     AudioManager.prepare();
     Input.onGesture(() => AudioManager.unlock());
+    Physics.init();
+    Effects.setScene(this.scene);
+
+    this.mountain = new MountainGenerator(this.scene);
+    this.mountain.tiersRevealed = () => this.data.tiersRevealed;
+    this.mountain.generate();
+
+    this.decor = new WorldDecor(this.scene, this.mountain);
+    this.decor.build();
+
+    const wind = new WindSystem(() => this.mountain.summitY);
+
     this.penguin = new PenguinController(this.scene);
     new PenguinVisual(this.penguin);
     this.penguin.teleport(this.mountain.spawnPoint, this.mountain.spawnYaw);
+    this.penguin.fell.on((drop, at) => this.onFell(drop, at));
+
     this.camera.position.set(0, 60, -200);
     this.cam = new ThirdPersonCamera(this.camera, this.mountain);
     this.cam.target = this.penguin.object;
-    Effects.snowFall(this.penguin.object);
+    refs.cam = this.cam;
 
-    // temporary (Task 4): straight into play, click to capture the mouse
-    const game = this;
-    refs.game = { get isPlaying() { return game.playing; }, currentStage: 0, data: { trapsTriggered: 0, inversions: 0 }, sendToBottom: () => this.penguin.teleport(this.mountain.spawnPoint, this.mountain.spawnYaw) };
-    this.playing = true;
-    this.cam.mode = CamMode.Follow;
-    this.cam.snapBehindTarget();
+    wind.init(this.penguin.object);
+
+    this.traps = new TrapDirector(i => this.mountain.getLedge(i));
+    this.penguin.landed.on((l, impact) => this.traps.onLanded(l, impact));
+    this.penguin.jumped.on(l => this.traps.onJumped(l));
+    this.penguin.fell.on(drop => this.traps.onFell(drop));
+    this.traps.spawnSnowball = from => spawnSnowball(this.scene, from, this.penguin.collider);
+
+    this.chaos = new ControlChaos();
+
+    this.ui = new UIManager(document.getElementById('ui')!);
+    this.ui.gm = this;
+    this.ui.build();
+
+    this.seq = new SequenceDirector(this, this.scene);
+
+    for (const f of this.mountain.checkpointFlags) new FakeCheckpoint(f.object, f.stage);
+    for (const f of this.mountain.fishes) new ShortcutFish(f.object);
+
+    Effects.snowFall(this.penguin.object);
+    this.lastSafePos.copy(this.mountain.spawnPoint);
+    this.lastSafeYaw = this.mountain.spawnYaw;
+    refs.game = this;
+
+    GameSettings.onChanged(() => this.applyQuality());
+    this.applyQuality();
+    this.resize();
+
+    // browser equivalents of OnApplicationFocus / OnApplicationQuit
+    addEventListener('blur', () => { if (this.state === GState.Playing) this.setPaused(true); });
+    document.addEventListener('visibilitychange', () => { if (document.hidden && this.state === GState.Playing) this.setPaused(true); });
+    addEventListener('pagehide', () => { if (this.state === GState.Playing || this.state === GState.Paused) this.saveNow(); });
+    // Esc while the mouse is captured is eaten by the browser to release the pointer: treat that as "pause"
+    Input.onLockChange(locked => {
+      if (locked) { this.hadPointerLock = true; return; }
+      if (this.hadPointerLock && this.state === GState.Playing) this.setPaused(true);
+      this.hadPointerLock = false;
+    });
+  }
+
+  private applyQuality() {
+    const q = GameSettings.quality;
+    this.renderer.setPixelRatio(q === 0 ? 0.75 : q === 1 ? 1 : Math.min(devicePixelRatio, 2));
+    const sun = this.decor.sun;
+    sun.castShadow = q > 0;
+    const size = q === 1 ? 1024 : 2048;
+    if (sun.shadow.mapSize.x !== size) { sun.shadow.mapSize.set(size, size); sun.shadow.map?.dispose(); sun.shadow.map = null; }
+    this.resize();
   }
 
   resize() {
@@ -77,10 +160,263 @@ export class Game {
     Effects.setPixelScale(h * this.renderer.getPixelRatio() / (2 * Math.tan(this.camera.fov * Math.PI / 360)));
   }
 
+  // ------------------------------------------------------------------ Start
+
   start() {
+    this.toMenu();
+    Scheduler.start(this, this.ui.fade(0, 1.2));
     this.last = performance.now();
     this.renderer.setAnimationLoop(now => this.frame(now));
   }
+
+  // ------------------------------------------------------------------ flow
+
+  toMenu() {
+    if (this.state === GState.Playing || this.state === GState.Paused) this.saveNow();
+    Time.timeScale = 1;
+    this.state = GState.Menu;
+    this.cam.mode = CamMode.MenuOrbit;
+    this.ui.showMenu();
+    AudioManager.duckMusic(1);
+    AudioManager.setFallLoop(0);
+    this.setCursor(false);
+  }
+
+  newGame() { Scheduler.start(this, this.beginRun(false)); }
+  continueGame() { Scheduler.start(this, this.beginRun(true)); }
+
+  private *beginRun(resume: boolean): Co {
+    Time.timeScale = 1;
+    this.state = GState.Cutscene;
+    this.setCursor(false);
+    yield* this.ui.fade(1, 0.35);
+
+    this.resetWorld();
+    const loaded = resume ? SaveSystem.load() : null;
+    if (loaded) {
+      this.data = loaded;
+      for (let t = 1; t <= this.data.tiersRevealed && t < this.mountain.tiers.length; t++) this.revealInstant(t);
+      let p = new THREE.Vector3(this.data.px, this.data.py + 0.2, this.data.pz);
+      if (p.lengthSq() < 0.01) p = this.mountain.spawnPoint.clone();
+      this.penguin.teleport(p, this.data.yaw);
+      this.lastSafePos.copy(p); this.lastSafeYaw = this.data.yaw;
+    } else {
+      SaveSystem.clear();
+      this.data = newSaveData();
+      this.penguin.teleport(this.mountain.spawnPoint, this.mountain.spawnYaw);
+      this.lastSafePos.copy(this.mountain.spawnPoint); this.lastSafeYaw = this.mountain.spawnYaw;
+      this.saveNowForce();
+    }
+    this.traps.loadBans(this.data.bannedTraps);
+    this.chaos.resetTimer();
+    this.currentStage = this.mountain.stageAtHeight(this.penguin.position.y);
+    this.lastBannerStage = -1;
+
+    this.ui.enterGameplayUI();
+    this.cam.mode = CamMode.Follow;
+    this.cam.snapBehindTarget();
+    this.state = GState.Playing;
+    this.setCursor(true);
+    if (!resume) this.ui.showControlsHint(14);
+    yield* this.ui.fade(0, 0.5);
+    if (resume) this.ui.taunt('Welcome back. The mountain missed you.');
+  }
+
+  /** Puts the world back to a fresh run: only tier 1 visible, ledges reset, no doom. */
+  resetWorld() {
+    for (let t = 0; t < this.mountain.tiers.length; t++) {
+      this.mountain.tiers[t].root.position.set(0, 0, 0);
+      this.mountain.setTierActive(t, t === 0);
+      this.mountain.syncTier(t);
+    }
+    this.mountain.resetAllLedges();
+    WorldDecor.instance.doomAmount = 0;
+    this.seq.cleanup();
+    this.penguin.inputLocked = false;
+    this.penguin.gravityScale = 1;
+    Time.timeScale = 1;
+  }
+
+  revealInstant(tier: number) {
+    const r = this.mountain.tiers[tier].root;
+    r.position.set(0, 0, 0);
+    this.mountain.setTierActive(tier, true);
+    this.mountain.syncTier(tier);
+    for (const l of this.mountain.ledges) if (l.root === r) l.resetState();
+  }
+
+  setPaused(paused: boolean) {
+    if (paused && this.state !== GState.Playing) return;
+    if (!paused && this.state !== GState.Paused) return;
+    this.state = paused ? GState.Paused : GState.Playing;
+    Time.timeScale = paused ? 0 : 1;
+    this.ui.showPause(paused);
+    AudioManager.duckMusic(paused ? 0.5 : 1);
+    this.setCursor(!paused);
+    if (paused) this.saveNow();
+  }
+
+  setCutscene(on: boolean) {
+    if (on) { this.state = GState.Cutscene; this.penguin.inputLocked = true; this.setCursor(false); }
+    else { this.state = GState.Playing; this.penguin.inputLocked = false; this.setCursor(true); this.cam.mode = CamMode.Follow; }
+  }
+
+  setEnding() { this.state = GState.Ending; this.penguin.inputLocked = true; }
+
+  private setCursor(locked: boolean) {
+    if (locked) Input.lockPointer(); else Input.unlockPointer();
+  }
+
+  // ------------------------------------------------------------------ Update
+
+  private update() {
+    let esc = Input.wasPressed('Escape');
+    const gp = Input.gamepad();
+    if (gp && gp.pressed(9)) esc = true;
+
+    if (esc) {
+      if (this.state === GState.Playing) this.setPaused(true);
+      else if (this.state === GState.Paused) { if (!this.ui.back()) this.setPaused(false); }
+      else if (this.state === GState.Menu) this.ui.back();
+      else if (this.ui.creditsActive) this.ui.endCredits();
+    }
+
+    // clicking back into the game re-locks the cursor
+    if (this.state === GState.Playing && !Input.isLocked && Input.mouseClicked) this.setCursor(true);
+
+    if (import.meta.env.DEV) this.debugKeys();
+
+    if (this.state !== GState.Playing) return;
+
+    const dt = Time.deltaTime;
+    this.data.time += dt;
+    const pc = this.penguin;
+    const pos = pc.position;
+
+    // stage tracking
+    const stage = pc.groundLedge && pc.groundLedge.index >= 0 ? pc.groundLedge.stage : this.mountain.stageAtHeight(pos.y);
+    if (pc.grounded && stage !== this.currentStage) {
+      const first = stage + 1 > this.data.maxStage;
+      const again = stage > this.currentStage && !first;
+      this.currentStage = stage;
+      if (first) this.data.maxStage = stage + 1;
+      if ((first || again) && (stage !== this.lastBannerStage || Time.time - this.lastBannerTime > 30)) {
+        this.ui.stageBanner(stage, again);
+        this.lastBannerStage = stage; this.lastBannerTime = Time.time;
+        AudioManager.play(again ? 'pop' : 'checkpoint', 0.5);
+      }
+    }
+    WorldDecor.instance.setStageFog(this.currentStage);
+
+    if (pos.y > this.data.bestHeight) this.data.bestHeight = pos.y;
+
+    if (pc.grounded) {
+      const gl = pc.groundLedge;
+      if (!gl || (!gl.isDynamic && gl.kind !== LedgeKind.Crumble && gl.kind !== LedgeKind.Blink && gl.kind !== LedgeKind.Bouncy)) {
+        this.lastSafePos.copy(pos);
+        this.lastSafeYaw = yawOf(pc.facing);
+      }
+    }
+
+    // idle taunt
+    const m = pc.rawMove;
+    if (m.x * m.x + m.y * m.y > 0.01 || !pc.grounded) this.idle = 0;
+    else if ((this.idle += dt) > 45) { this.idle = 0; this.ui.taunt(Taunts.pick(Taunts.Idle)); }
+
+    // autosave
+    if ((this.autosave += dt) > 8) { this.autosave = 0; this.saveNow(); }
+
+    // summit checks
+    const tierIdx = Math.min(Math.max(this.data.tiersRevealed, 0), this.mountain.tiers.length - 1);
+    const tier = this.mountain.tiers[tierIdx];
+    const horiz = Math.hypot(pos.x, pos.z);
+    if (pc.grounded && pos.y >= tier.topY - 0.35 && horiz < tier.rTop + 0.3 && !this.sendingToBottom) {
+      if (tierIdx < this.mountain.tiers.length - 1) this.seq.runFakeSummit(tierIdx);
+      else this.seq.runEnding();
+    }
+  }
+
+  /** dev-only helpers (npm run dev): F9 = jump to the current tier's last ledge, F8 = jump to next stage start */
+  private debugKeys() {
+    if (this.state !== GState.Playing) return;
+    if (Input.wasPressed('F9')) {
+      const t = this.mountain.tiers[Math.min(this.data.tiersRevealed, 2)];
+      const l = [...this.mountain.ledges].reverse().find(x => x.stage === t.lastStage)!;
+      this.penguin.teleport(l.position.add(new THREE.Vector3(0, 0.2, 0)), yawOf(l.forward));
+      this.cam.snapBehindTarget();
+    }
+    if (Input.wasPressed('F8')) {
+      const next = this.mountain.ledges.find(x => x.stage === this.currentStage + 1 && x.kind === LedgeKind.Rest);
+      if (next && this.mountain.isTierActive(this.mountain.tiers.findIndex(t => t.root === next.root))) {
+        this.penguin.teleport(next.position.add(new THREE.Vector3(0, 0.2, 0)), yawOf(next.forward));
+        this.cam.snapBehindTarget();
+      }
+    }
+  }
+
+  // ------------------------------------------------------------------ falls
+
+  private onFell(drop: number, at: THREE.Vector3) {
+    if (this.state !== GState.Playing) return;
+    this.data.falls++;
+    SaveSystem.lifetimeFalls = SaveSystem.lifetimeFalls + 1;
+    if (drop > this.data.biggestFall) this.data.biggestFall = drop;
+    let msg = Taunts.forFall(drop);
+    if (at.y < 1.5 && drop > 12) { msg = Taunts.pick(Taunts.Bottom); this.data.bottomResets++; }
+    this.ui.taunt(msg);
+    this.ui.toast(`-${Math.round(drop)} m`, css(1, 0.5, 0.45), 1.1);
+    if (drop > 40) this.cam.shake(0.35);
+  }
+
+  sendToBottom(message: string) {
+    if (this.sendingToBottom || this.state === GState.Ending) return;
+    Scheduler.start(this, this.sendToBottomRoutine(message));
+  }
+
+  private *sendToBottomRoutine(message: string): Co {
+    this.sendingToBottom = true;
+    this.penguin.inputLocked = true;
+    AudioManager.play('suck', 0.9);
+    const drop = this.penguin.position.y - this.mountain.spawnPoint.y;
+    const tint = css(0.9, 0.95, 1);
+    yield* this.ui.fade(1, 0.45, tint);
+    this.penguin.teleport(this.mountain.spawnPoint, this.mountain.spawnYaw);
+    this.lastSafePos.copy(this.mountain.spawnPoint);
+    this.cam.snapBehindTarget();
+    this.data.falls++; this.data.bottomResets++;
+    SaveSystem.lifetimeFalls = SaveSystem.lifetimeFalls + 1;
+    if (drop > this.data.biggestFall) this.data.biggestFall = drop;
+    yield 0.3;
+    yield* this.ui.fade(0, 0.5, tint);
+    this.ui.taunt(message);
+    if (drop > 1) this.ui.toast(`-${Math.round(drop)} m`, css(1, 0.5, 0.45), 1.4);
+    this.penguin.inputLocked = false;
+    this.sendingToBottom = false;
+    this.saveNow();
+  }
+
+  // ------------------------------------------------------------------ saving
+
+  saveNow() {
+    if (this.state !== GState.Playing && this.state !== GState.Paused && this.state !== GState.Cutscene) return;
+    this.saveNowForce();
+  }
+
+  private saveNowForce() {
+    this.data.px = this.lastSafePos.x; this.data.py = this.lastSafePos.y; this.data.pz = this.lastSafePos.z;
+    this.data.yaw = this.lastSafeYaw;
+    this.data.bannedTraps = this.traps.exportBans();
+    SaveSystem.save(this.data);
+  }
+
+  // ------------------------------------------------------------------ GameForUI
+
+  penguinHeight() { return this.penguin.object.position.y; }
+  penguinHanging() { return this.penguin.state === PState.Hang; }
+  grip01() { return this.penguin.grip01; }
+  tierTop() { return this.mountain.tiers[Math.min(Math.max(this.data.tiersRevealed, 0), this.mountain.tiers.length - 1)].topY; }
+
+  // ------------------------------------------------------------------ frame
 
   private frame(now: number) {
     const raw = Math.min(0.1, (now - this.last) / 1000);
@@ -91,19 +427,19 @@ export class Game {
     Time.time += Time.deltaTime;
     Time.frameCount++;
 
+    Input.pollGamepad();
     if (Time.timeScale > 0) {
       const steps = this.stepper.stepsFor(Time.deltaTime);
       for (let i = 0; i < steps; i++) { Loop.fixed(); Physics.world.step(); this.penguin.afterStep(); }
     }
     refs.alpha = this.stepper.alpha;
-    Input.pollGamepad();
-    if (this.playing && !Input.isLocked && Input.mouseClicked) Input.lockPointer();
+    this.update();
     Loop.update();
     Scheduler.update();
     Loop.late();
     AudioManager.update();
     Effects.update(Time.deltaTime);
-    this.decor.focusShadows(this.penguin.object.position);
+    this.decor.focusShadows(this.state === GState.Menu ? new THREE.Vector3(0, 40, 0) : this.penguin.object.position);
     this.renderer.render(this.scene, this.camera);
     Input.endFrame();
   }
