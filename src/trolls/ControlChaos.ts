@@ -8,6 +8,11 @@ import { AudioManager } from '../audio/AudioManager.ts';
 export const ChaosMode = { None: 0, Inverted: 1, Mirrored: 2, Rotated: 3 } as const;
 export type ChaosMode = (typeof ChaosMode)[keyof typeof ChaosMode];
 
+/** how long a control flip lasts: round 4 doubled it for every mode (inverted, mirrored, rotated 90°) */
+export function chaosDuration(_mode: number, rand01: number, stage01: number) {
+  return (12 + rand01 * 6 + stage01 * 8) * 2;
+}
+
 export function chaosModeName(m: number) {
   switch (m) {
     case ChaosMode.Inverted: return 'INVERTED';
@@ -68,7 +73,7 @@ export class ControlChaos {
       this.warning = false;
       ControlChaos.mode = this.pending; this.last = this.pending;
       const stage01 = gm.currentStage / 19;
-      this.endTime = Time.time + UnityRandom.range(12, 18) + stage01 * 8;
+      this.endTime = Time.time + chaosDuration(this.pending, UnityRandom.value(), stage01);
       refs.ui?.setChaosWarning(false);
       refs.ui?.setChaos(true, ControlChaos.mode);
       gm.data.inversions++;

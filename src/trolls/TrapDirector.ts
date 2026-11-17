@@ -45,7 +45,9 @@ export const NEW_TRAPS: TrapDef[] = [
 ];
 DEFS.push(...NEW_TRAPS);
 
-const COOLDOWN = 4;
+const COOLDOWN = 2;
+/** traps whose chance per ledge stays at the round-2 level (user request); everything else got heavier */
+const FIXED_RATE: TrapType[] = ['Gust', 'Seagull'];
 
 /** Hook for spawning the snowball (needs the scene + physics; injected by the game). */
 export type SnowballSpawner = (from: THREE.Vector3) => void;
@@ -82,7 +84,31 @@ export class TrapDirector {
     refs.traps = this;
   }
 
-  static chanceFor(stage: number) { return stage < 1 ? 0 : lerp(0.10, 0.45, (stage - 1) / 18); }
+  /** chance that landing on a new ledge fires a trap (round 4: heavier, 30% → 80%) */
+  static chanceFor(stage: number) { return stage < 1 ? 0 : lerp(0.30, 0.80, (stage - 1) / 18); }
+  /** the round-2 chance (10% → 45%), still used for Gust and Seagull */
+  static legacyChance(stage: number) { return stage < 1 ? 0 : lerp(0.10, 0.45, (stage - 1) / 18); }
+
+  /** per-trap chance on this landing under the round-2 rules (weights shared across all candidates) */
+  legacyProbabilities(l: Ledge): Partial<Record<TrapType, number>> {
+    const cands = this.candidates(l), total = cands.reduce((a, c) => a + c.weight, 0), out: Partial<Record<TrapType, number>> = {};
+    for (const c of cands) out[c.type] = total > 0 ? TrapDirector.legacyChance(l.stage) * c.weight / total : 0;
+    return out;
+  }
+
+  /** per-trap chance on this landing now: Gust/Seagull keep their round-2 chance, the rest share what's left */
+  probabilities(l: Ledge): Partial<Record<TrapType, number>> {
+    const cands = this.candidates(l);
+    const legacy = this.legacyProbabilities(l);
+    const out: Partial<Record<TrapType, number>> = {};
+    let fixed = 0;
+    for (const t of FIXED_RATE) if (legacy[t] !== undefined) { out[t] = legacy[t]; fixed += legacy[t]!; }
+    const others = cands.filter(c => !FIXED_RATE.includes(c.type));
+    const wSum = others.reduce((a, c) => a + c.weight, 0);
+    const rest = Math.max(0, TrapDirector.chanceFor(l.stage) - fixed);
+    for (const c of others) out[c.type] = wSum > 0 ? rest * c.weight / wSum : 0;
+    return out;
+  }
 
   /** start/resume a game: bans (fell-after-trap), traps already fired this game, and last game's pairs to avoid */
   loadRun(bans: string[] | null | undefined, fired: string[] | null | undefined, lastRun: string[] | null | undefined) {
@@ -123,24 +149,16 @@ export class TrapDirector {
     if (Time.time - this.lastTrapTime < COOLDOWN) return;
     if (l.stage < 1 || l.kind === LedgeKind.Rest) return;
 
-    if (UnityRandom.value() > TrapDirector.chanceFor(l.stage)) return;
-
-    const type = this.pickTrap(l);
-    if (type === 'None') return;
-    this.fire(type, l);
+    // one roll across all traps: the "other" traps first, then the fixed-rate ones; above the total = no trap
+    const probs = this.probabilities(l);
+    const order = (Object.keys(probs) as TrapType[]).sort((a, b) => Number(FIXED_RATE.includes(a)) - Number(FIXED_RATE.includes(b)));
+    let r = UnityRandom.value();
+    for (const t of order) { r -= probs[t]!; if (r < 0) { this.fire(t, l); return; } }
   }
 
   /** trap types that may fire on this ledge right now (tests + dev menu) */
   candidateTypes(l: Ledge): TrapType[] { return this.candidates(l).map(c => c.type); }
 
-  private pickTrap(l: Ledge): TrapType {
-    const cands = this.candidates(l);
-    if (cands.length === 0) return 'None';
-    const total = cands.reduce((a, c) => a + c.weight, 0);
-    let r = UnityRandom.value() * total;
-    for (const c of cands) { r -= c.weight; if (r <= 0) return c.type; }
-    return cands[cands.length - 1].type;
-  }
 
   private candidates(l: Ledge): TrapDef[] {
     const cands: TrapDef[] = [];

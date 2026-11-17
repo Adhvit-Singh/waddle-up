@@ -116,3 +116,8 @@ tests/                      node --test unit tests (npm test)
      of the other buttons (it used to be able to hide behind them, so clicks hit Settings).
   Jumps still provably identical (fixture test). Unit tests 63/63; e2e: bounce, traps (20), grab, pause, devmenu,
   devmenu-esc, camera, summits — all pass. Build has no dev code (dist scan).
+- **2026-11-18 (round 4: heavier traps)**: user picked "heavier". Trap chance per new ledge 30% → 80% (was 10% → 45%),
+  cooldown 2 s (was 4 s). Gust and Seagull keep their round-2 chance per ledge exactly (user request); the other 18 traps
+  share the rest. Control flips (inverted, mirrored, rotated 90°) last twice as long (24–36 s + up to 16 s higher up).
+  Estimated traps per stage (14 landings, 1.5 s apart): stage 2 ≈ 3.3 (was 1.2), stage 10 ≈ 4.9 (was 2.4),
+  stage 20 ≈ 6.4 (was 3.5). Tests 65/65; e2e traps/summits/pause pass.

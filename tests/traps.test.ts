@@ -54,10 +54,10 @@ test('loadBans restores the banned list', () => {
 // ---------------------------------------------------------------- round 2 rules
 import { SaveSystem, normalizeSave } from '../src/core/SaveSystem.ts';
 
-test('trap chance: none on stage 1, ~10% at stage 2 rising to ~45% at stage 20', () => {
+test('trap chance: none on stage 1, 30% at stage 2 rising to 80% at stage 20', () => {
   assert.equal(TrapDirector.chanceFor(0), 0);
-  assert.ok(Math.abs(TrapDirector.chanceFor(1) - 0.10) < 1e-9);
-  assert.ok(Math.abs(TrapDirector.chanceFor(19) - 0.45) < 1e-9);
+  assert.ok(Math.abs(TrapDirector.chanceFor(1) - 0.30) < 1e-9);
+  assert.ok(Math.abs(TrapDirector.chanceFor(19) - 0.80) < 1e-9);
 });
 
 test('a trap never fires twice at the same ledge in one game', () => {
@@ -97,12 +97,26 @@ test('saves remember fired traps (old saves default to [])', () => {
   assert.deepEqual(normalizeSave({} as never).firedTraps, []);
 });
 
-test('the cooldown between traps is 4 seconds', () => {
+test('the cooldown between traps is 2 seconds', () => {
   const td = setup();
   const realRandom = Math.random; Math.random = () => 0;
   try {
     td.onLanded(ledge(40), 2); const n = td.trapsFired;
-    Time.time += 3.9; td.onLanded(ledge(41), 2); assert.equal(td.trapsFired, n);
+    Time.time += 1.9; td.onLanded(ledge(41), 2); assert.equal(td.trapsFired, n);
     Time.time += 0.2; td.onLanded(ledge(42), 2); assert.equal(td.trapsFired, n + 1);
   } finally { Math.random = realRandom; }
+});
+
+test('Gust and Seagull keep their round-2 chance per ledge; the other traps share the rest of the (higher) chance', () => {
+  const td = setup();
+  for (const stage of [1, 5, 12, 19]) {
+    const l = ledge(60 + stage, stage);
+    const p = td.probabilities(l);
+    // round-2 rule: chance lerp(0.10, 0.45) split by weight across all candidates
+    const old = td.legacyProbabilities(l);
+    for (const keep of ['Gust', 'Seagull'] as const) assert.ok(Math.abs((p[keep] ?? 0) - (old[keep] ?? 0)) < 1e-9, `${keep} at stage ${stage}`);
+    const total = Object.values(p).reduce((a, b) => a + b, 0);
+    assert.ok(Math.abs(total - TrapDirector.chanceFor(stage)) < 1e-9, `total at stage ${stage}`);
+    for (const [k, v] of Object.entries(p)) if (k !== 'Gust' && k !== 'Seagull') assert.ok(v >= (old[k as never] ?? 0) - 1e-12, `${k} must not get rarer`);
+  }
 });
