@@ -10,6 +10,7 @@ import { Taunts } from './Taunts.ts';
 import { SaveSystem } from '../core/SaveSystem.ts';
 import type { Ledge } from '../world/Ledge.ts';
 import { TrapEffects } from './TrapEffects.ts';
+import { trapGustStrength } from './windStrength.ts';
 
 export type TrapType = 'None' | 'Crumble' | 'Sneeze' | 'Gust' | 'Ice' | 'Shy' | 'Bounce' | 'Snowball' | 'CameraFlip' | 'Gravity' | 'Blackout' | 'Trapdoor' | 'Achievement' | 'External'
   | 'Seagull' | 'FallThrough' | 'Tilt' | 'SlipGrab' | 'CameraTroll' | 'InputDelay' | 'FakeCrash' | 'FakeSave';
@@ -215,7 +216,7 @@ export class TrapDirector {
       case 'Gust':
         AudioManager.play('whistle', 0.5);
         yield 0.45;
-        refs.wind?.gustAtPenguin(10 + l.stage * 0.6, 1.4);
+        refs.wind?.gustAtPenguin(trapGustStrength(l.stage), 1.4);
         ui?.taunt('Breezy today, huh?');
         break;
 

@@ -7,6 +7,7 @@ import { inverseLerp } from '../core/math.ts';
 import { STAGES } from '../core/StageData.ts';
 import { AudioManager } from '../audio/AudioManager.ts';
 import { Effects, type ParticleSystem } from '../world/Effects.ts';
+import { stageGustStrength } from './windStrength.ts';
 
 /** Periodic gusts in windy stages + trap gusts. Pushes the penguin and shows streaks. */
 export class WindSystem {
@@ -55,7 +56,7 @@ export class WindSystem {
       if (!this.warned && Time.time >= this.nextStageGust - 0.8) { this.warned = true; AudioManager.play('whistle', 0.5); }
       if (Time.time >= this.nextStageGust) {
         this.warned = false;
-        const s = 9 + gm!.currentStage * 0.45;
+        const s = stageGustStrength(gm!.currentStage);
         this.gustAtPenguin(s, UnityRandom.range(1.1, 1.8));
         this.nextStageGust = Time.time + UnityRandom.range(4, 7.5);
       }
