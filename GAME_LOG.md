@@ -100,4 +100,5 @@ tests/                      node --test unit tests (npm test)
   - e2e/summits.mjs: full flow ALL PASS. Tests 50/50.
   - Found, NOT changed (from the original Unity layout): 3 low-headroom spots on the top tier near stage 18
     (ledge 259 sits 1.66 m / 1.88 m above ledges 248/247; 254 is 2.45 m above 241). Ask the user.
-  - Left for next time: final whole-branch review, README section on the dev menu.
+  - Final check done: all browser checks pass (bounce, 20 traps, dev menu, full summit flow), 50/50 unit tests,
+    build scan proves no developer code ships (F8/F9/F10 all live in src/dev/, dev server only). README updated.
