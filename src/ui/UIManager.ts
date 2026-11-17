@@ -10,6 +10,7 @@ import { GameSettings, QUALITY_NAMES } from '../core/GameSettings.ts';
 import { SaveSystem, type SaveData } from '../core/SaveSystem.ts';
 import { AudioManager } from '../audio/AudioManager.ts';
 import { chaosModeName } from '../trolls/ControlChaos.ts';
+import { resumeDodges } from '../core/pauseRules.ts';
 import {
   UIColors, rect, stretch, image, panel, label, text, button, column, sliderRow, optionRow, DodgeButton, setPos, place, type Txt,
 } from './UIFactory.ts';
@@ -411,6 +412,7 @@ export class UIManager {
     this.pauseTip = text('Tip', p, [0.5, 0], [0, 50], [560, 60], '', 22, UIColors.Dim, 'mc', 'i');
     const col = column('Col', p, [0.5, 0.5], [0, 150], 460, 16, [0.5, 1]);
     const holder = rect('ResumeHolder', col, [0.5, 0.5], [0, 0], [460, 74]);
+    holder.style.zIndex = '20';
     holder.classList.add('flow');
     const resume = button(holder, 'RESUME', () => this.gm.setPaused(false), 460, 74, css(0.95, 0.5, 0.15), 34);
     resume.classList.remove('flow');
@@ -425,7 +427,7 @@ export class UIManager {
     show(this.settings, false); show(this.how, false); show(this.confirmEl, false);
     show(this.pause, on);
     if (on) {
-      this.resumeDodge.arm(UnityRandom.value() < 0.3 ? UnityRandom.rangeInt(1, 4) : 0);
+      this.resumeDodge.arm(resumeDodges(UnityRandom.value()));   // always runs away 4–7 times
       this.pauseTip.set(BAD_TIPS[UnityRandom.rangeInt(0, BAD_TIPS.length)]);
     }
   }

@@ -166,17 +166,23 @@ export function optionRow(parent: HTMLElement, lbl: string, current: () => strin
 /** The pause menu Resume button that sometimes runs away from the mouse. */
 export class DodgeButton {
   dodgesLeft = 0;
+  private x = 0; private y = 0;
   private el: HTMLElement;
   private onLastDodge: () => void;
   constructor(el: HTMLElement, onLastDodge: () => void) {
     this.el = el; this.onLastDodge = onLastDodge;
+    el.style.zIndex = '20';            // always on top of the other pause buttons, wherever it jumps
     el.addEventListener('mouseenter', () => this.enter());
   }
-  arm(dodges: number) { this.dodgesLeft = dodges; this.el.style.translate = '0px 0px'; }
+  arm(dodges: number) { this.dodgesLeft = dodges; this.x = 0; this.y = 0; this.el.style.translate = '0px 0px'; }
   private enter() {
     if (this.dodgesLeft <= 0) return;
     this.dodgesLeft--;
-    this.el.style.translate = `${UnityRandom.range(-260, 260)}px ${-UnityRandom.range(-60, 60)}px`;
+    // jump somewhere clearly different (at least 160 px away) so it really runs from the mouse
+    let x = 0, y = 0;
+    do { x = UnityRandom.range(-420, 420); y = UnityRandom.range(-210, 210); } while (Math.hypot(x - this.x, y - this.y) < 160);
+    this.x = x; this.y = y;
+    this.el.style.translate = `${x}px ${-y}px`;
     AudioManager.play('scoot', 0.6);
     if (this.dodgesLeft === 0) this.onLastDodge();
   }

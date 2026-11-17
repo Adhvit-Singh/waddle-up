@@ -7,6 +7,7 @@ import { Input } from './Input.ts';
 import { GameSettings } from './GameSettings.ts';
 import { SaveSystem, newSaveData, type SaveData } from './SaveSystem.ts';
 import { css, yawOf } from './math.ts';
+import { onEscape, shouldPauseOnUnlock } from './pauseRules.ts';
 import { LedgeKind } from './StageData.ts';
 import { Physics } from '../physics/Physics.ts';
 import { AudioManager } from '../audio/AudioManager.ts';
@@ -62,7 +63,8 @@ export class Game implements GameForUI {
   private lastSafeYaw = 0;
   private sendingToBottom = false;
   private hadPointerLock = false;
-  private lockLostAt = -1;
+  /** while true, losing the mouse doesn't pause and clicks don't re-capture it (used by the local dev menu) */
+  holdUnlocked = false;
 
   constructor(canvas: HTMLCanvasElement) {
     Game.instance = this;
@@ -141,7 +143,7 @@ export class Game implements GameForUI {
     // Esc while the mouse is captured is eaten by the browser to release the pointer: treat that as "pause"
     Input.onLockChange(locked => {
       if (locked) { this.hadPointerLock = true; return; }
-      if (this.hadPointerLock && this.state === GState.Playing) { this.setPaused(true); this.lockLostAt = Time.unscaledTime; }
+      if (shouldPauseOnUnlock(this.hadPointerLock, this.state === GState.Playing, this.holdUnlocked)) this.setPaused(true);
       this.hadPointerLock = false;
     });
   }
@@ -278,20 +280,17 @@ export class Game implements GameForUI {
   // ------------------------------------------------------------------ Update
 
   private update() {
-    // the Esc that released the mouse may also arrive as a key press: don't let it instantly un-pause
-    let esc = Input.wasPressed('Escape') && Time.unscaledTime - this.lockLostAt > 0.3;
+    let esc = Input.wasPressed('Escape');
     const gp = Input.gamepad();
     if (gp && gp.pressed(9)) esc = true;
 
     if (esc) {
-      if (this.state === GState.Playing) this.setPaused(true);
-      else if (this.state === GState.Paused) { if (!this.ui.back()) this.setPaused(false); }
-      else if (this.state === GState.Menu) this.ui.back();
-      else if (this.ui.creditsActive) this.ui.endCredits();
+      const st = this.state === GState.Playing ? 'playing' : this.state === GState.Paused ? 'paused' : this.state === GState.Menu ? 'menu' : 'other';
+      onEscape(st, this.ui, on => this.setPaused(on));   // Esc never resumes: only the RESUME button does
     }
 
     // clicking back into the game re-locks the cursor
-    if (this.state === GState.Playing && !Input.isLocked && Input.mouseClicked) this.setCursor(true);
+    if (this.state === GState.Playing && !Input.isLocked && Input.mouseClicked && !this.holdUnlocked) this.setCursor(true);
 
     if (this.state !== GState.Playing) return;
 
