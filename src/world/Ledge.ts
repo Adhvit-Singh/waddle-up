@@ -11,6 +11,7 @@ import { MeshBuilder, meshObject, Mats } from './MeshKit.ts';
 import { AudioManager } from '../audio/AudioManager.ts';
 import { Effects } from './Effects.ts';
 import type { LedgeSpec } from './MountainData.ts';
+import { buildLedgeVisual, isRocky } from './LedgeVisual.ts';
 
 const iceTintMat = () => Mats.vertexColorInstance(col(0.7, 0.9, 1.25), col(0.05, 0.12, 0.2));
 let sharedIceMat: THREE.Material | null = null;
@@ -90,19 +91,12 @@ export class Ledge {
     const vary = (rng.nextDouble() - 0.5) * 0.12;
     side = col(clamp01(side.r + vary), clamp01(side.g + vary), clamp01(side.b + vary));
 
-    const mb = new MeshBuilder();
-    mb.box(new THREE.Vector3(0, -sz.y * 0.5, 0), sz, side, cap);
-    if (k === LedgeKind.Normal || k === LedgeKind.Rest || k === LedgeKind.Wall) {
-      mb.box(new THREE.Vector3(0, -0.08, 0), new THREE.Vector3(sz.x + 0.12, 0.18, sz.z + 0.12), mulRGB(cap, 0.96), cap);
-      for (let i = 0; i < 2; i++) {
-        const z = (rng.nextDouble() - 0.5) * sz.z * 0.8;
-        const y = -0.4 - rng.nextDouble() * Math.max(0.1, sz.y - 0.8);
-        mb.sphere(new THREE.Vector3(sz.x * 0.5, y, z), new THREE.Vector3(0.25, 0.2, 0.3), mulRGB(side, 0.85), 5, 3, 0.25, seed + i);
-      }
-    }
+    const rocky = isRocky(k);
+    const mb = rocky ? buildLedgeVisual(spec) : new MeshBuilder();
+    if (!rocky) mb.box(new THREE.Vector3(0, -sz.y * 0.5, 0), sz, side, cap);
     if (k === LedgeKind.Bouncy) mb.sphere(new THREE.Vector3(0, 0.02, 0), new THREE.Vector3(sz.x * 0.42, 0.18, sz.z * 0.42), cap, 8, 4);
 
-    this.visual = meshObject('Visual', mb.build(), this.object);
+    this.visual = meshObject('Visual', mb.build(), this.object, true, rocky ? Mats.rock : undefined);
     this.baseMat = this.visual.material as THREE.Material;
 
     // ---- physics

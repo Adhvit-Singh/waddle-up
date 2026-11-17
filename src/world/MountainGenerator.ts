@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { Physics, RAPIER } from '../physics/Physics.ts';
 import { generateMountain, type MountainData, type TierInfo, type FlagSpec, type CragSpec } from './MountainData.ts';
-import { MeshBuilder } from './MeshKit.ts';
+import { MeshBuilder, Mats } from './MeshKit.ts';
 import { col, mulRGB } from '../core/math.ts';
 import { meshObject } from './MeshKit.ts';
 import { Ledge } from './Ledge.ts';
@@ -65,7 +65,7 @@ export class MountainGenerator {
     }
     for (const g of d.glows) this.glows.push({ ps: Props.glow(g.pos, g.color!), tier: g.tier });
     for (const b of d.bodies) {
-      meshObject('MountainBody', b.mesh.build(), this.tiers[b.tier].root);
+      meshObject('MountainBody', b.mesh.build(), this.tiers[b.tier].root, true, Mats.rock);
       const tc = trimeshCollider(b.mesh, { mountain: b.tier, object: this.tiers[b.tier].root });
       this.bodies.push({ tier: b.tier, ...tc });
     }
@@ -92,7 +92,7 @@ export class MountainGenerator {
     mb.cone(new THREE.Vector3(0, -0.5, 0), c.radius, c.height + 0.5, rock, 7, 0.35, c.seed);
     mb.cone(new THREE.Vector3(c.radius * 0.5, -0.5, c.radius * 0.2), c.radius * 0.55, c.height * 0.6, mulRGB(rock, 0.9), 6, 0.3, c.seed + 1);
     mb.cone(new THREE.Vector3(0, c.height * 0.72, 0), c.radius * 0.28, c.height * 0.3, col(0.9, 0.93, 0.98), 6, 0.2, c.seed + 2);
-    const m = meshObject('Crag', mb.build(), this.tiers[c.tier].root);
+    const m = meshObject('Crag', mb.build(), this.tiers[c.tier].root, true, Mats.rock);
     m.position.copy(c.pos);
     m.rotation.y = (c.seed % 628) / 100;
     const pos = mb.positions();

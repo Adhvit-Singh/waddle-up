@@ -121,6 +121,12 @@ export class MeshBuilder {
 /** Shared materials (port of Mats). Created lazily so Node tests never touch WebGL. */
 export const Mats = {
   _vc: null as THREE.MeshLambertMaterial | null,
+  _rock: null as THREE.MeshLambertMaterial | null,
+  /** vertex-colour material with a procedural world-space rock grain (no texture files) */
+  get rock(): THREE.MeshLambertMaterial {
+    if (!this._rock) this._rock = makeRockMat();
+    return this._rock;
+  },
   get vertexColor(): THREE.MeshLambertMaterial {
     if (!this._vc) this._vc = makeVertexColorMat();
     return this._vc;
@@ -133,6 +139,28 @@ export const Mats = {
     return m;
   },
 };
+
+function makeRockMat() {
+  const m = makeVertexColorMat();
+  m.onBeforeCompile = shader => {
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vRockPos;')
+      .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvRockPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', `#include <common>
+varying vec3 vRockPos;
+float rh(vec3 p) { p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
+float rn(vec3 x) { vec3 i = floor(x); vec3 f = fract(x); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(mix(rh(i), rh(i + vec3(1,0,0)), f.x), mix(rh(i + vec3(0,1,0)), rh(i + vec3(1,1,0)), f.x), f.y),
+             mix(mix(rh(i + vec3(0,0,1)), rh(i + vec3(1,0,1)), f.x), mix(rh(i + vec3(0,1,1)), rh(i + vec3(1,1,1)), f.x), f.y), f.z); }`)
+      .replace('#include <color_fragment>', `#include <color_fragment>
+float grain = rn(vRockPos * 1.9) * 0.6 + rn(vRockPos * 5.3) * 0.4;
+float strata = rn(vec3(vRockPos.x * 0.15, vRockPos.y * 2.2, vRockPos.z * 0.15));
+diffuseColor.rgb *= 0.82 + grain * 0.26 + (strata - 0.5) * 0.08;`);
+  };
+  m.customProgramCacheKey = () => 'wu-rock';
+  return m;
+}
 
 function makeVertexColorMat() {
   return new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
