@@ -12,6 +12,7 @@ import { AudioManager } from '../audio/AudioManager.ts';
 import { Effects } from '../world/Effects.ts';
 import { Taunts } from '../trolls/Taunts.ts';
 import { TrapEffects } from '../trolls/TrapEffects.ts';
+import { grabAllowed } from './grabRule.ts';
 
 export const PState = { Ground: 0, Air: 1, Hang: 2, Climb: 3, Stunned: 4, Ragdoll: 5 } as const;
 export type PState = (typeof PState)[keyof typeof PState];
@@ -66,6 +67,8 @@ export class PenguinController {
   private touching = new Set<number>();
   /** set by launch(); lets updateMove keep a launch made during the same step (bouncy ledges) */
   private launched = false;
+  /** index of the last path ledge the penguin stood on (-1 = unknown, e.g. right after a teleport) */
+  lastStoodIndex = -1;
   private slipUntil = 0;
   private slipAt = 0;
   private lastDelayedMove = { x: 0, y: 0 };
@@ -207,6 +210,7 @@ export class PenguinController {
       // a bouncy ledge (or anything else) launched us on landing: keep that velocity, don't stand still
       if (this.launched) return;
       this.groundLedge = ledge;
+      if (ledge && ledge.index >= 0) this.lastStoodIndex = ledge.index;
       this.coyote = 0.11;
       if (this.state === PState.Air) this.state = PState.Ground;
       if (this.state === PState.Stunned && Time.time >= this.stunUntil) this.state = PState.Ground;
@@ -333,6 +337,7 @@ export class PenguinController {
     if (top.collider !== wall.collider && (top.owner?.ledge ?? null) !== (wall.owner?.ledge ?? null)) return;
     const ledge = top.owner?.ledge ?? null;
     if (ledge && !ledge.solid) return;
+    if (!grabAllowed(ledge ? ledge.index : null, this.lastStoodIndex)) return;   // no grabbing the loop above
 
     const standPoint = top.point.clone().addScaledVector(n, -0.45).add(new THREE.Vector3(0, 0.04, 0));
     if (Physics.checkCapsule(standPoint.clone().add(new THREE.Vector3(0, RADIUS + 0.06, 0)), standPoint.clone().add(new THREE.Vector3(0, HEIGHT - RADIUS, 0)), RADIUS * 0.85))
@@ -453,6 +458,7 @@ export class PenguinController {
     this.groundLedge = null;
     this.gravityScale = 1;
     this.slipUntil = 0; this.slipAt = 0; this.delayed = [];
+    this.lastStoodIndex = -1;
     this.facing = dirFromYaw(yaw);
     this.body.lockRotations(true, true);
     this.body.setRotation({ x: 0, y: 0, z: 0, w: 1 }, true);
