@@ -125,8 +125,7 @@ export class PenguinController {
     if (cam) { cam.getWorldDirection(f); f.y = 0; }
     if (f.lengthSq() < 0.0001) f.set(0, 0, 1);
     f.normalize();
-    // three.js is right-handed: screen-right = forward × up (Unity used Cross(up, forward))
-    const r = new THREE.Vector3().crossVectors(f, UP);
+    const r = new THREE.Vector3().crossVectors(UP, f); // Vector3.Cross(Vector3.up, f), as in Unity
     return f.multiplyScalar(this.moveInput.y).addScaledVector(r, this.moveInput.x);
   }
 

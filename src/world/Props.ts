@@ -199,6 +199,7 @@ function makeTextMesh(text: string, scale: number, color: THREE.Color) {
   const H = Math.ceil(metrics.reduce((a, m) => a + m.h, 0) + pad * 2);
   canvas.width = W; canvas.height = H;
   const css = `rgb(${Math.round(Math.min(1, color.r) * 255)},${Math.round(Math.min(1, color.g) * 255)},${Math.round(Math.min(1, color.b) * 255)})`;
+  ctx.translate(W, 0); ctx.scale(-1, 1); // pre-mirror: the canvas is shown flipped (see index.html)
   let y = pad;
   ctx.textBaseline = 'middle';
   lines.forEach((l, i) => {

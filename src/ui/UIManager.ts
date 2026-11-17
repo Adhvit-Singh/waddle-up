@@ -328,7 +328,8 @@ export class UIManager {
     this.titleRt = rect('Title', t, [0, 1], [110, -110], [900, 170], [0, 1]);
     const title = label(this.titleRt, 'WADDLE UP', 140, '#fff', 'ul', 'b', false);
     title.style.textShadow = `5px 5px 0 ${UIColors.Accent}`;
-    text('Sub', t, [0, 1], [118, -280], [900, 50], 'a penguin\'s worst day', 40, UIColors.Ice, 'ul', 'i').parentElement!.style.transform = 'translate(0, 50%)';
+    const sub = text('Sub', t, [0, 1], [118, -280], [900, 50], 'a penguin\'s worst day', 40, UIColors.Ice, 'ul', 'i');
+    place(sub.parentElement!, [0, 1], [118, -280], [900, 50], [0, 1]);
 
     const col = column('Buttons', t, [0, 0.5], [110, -130], 480, 14, [0, 0.5]);
     this.continueBtn = button(col, 'CONTINUE', () => this.gm.continueGame(), 480, 78, css(0.95, 0.5, 0.15), 36);

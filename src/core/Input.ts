@@ -1,3 +1,5 @@
+import { MouseSpikeFilter } from './mouseFilter.ts';
+
 /** Keyboard / mouse / gamepad state with Unity-style "pressed this frame" semantics. */
 const down = new Set<string>();
 const pressed = new Set<string>();
@@ -7,6 +9,7 @@ let padPrev: boolean[] = [];
 let padNow: boolean[] = [];
 const lockListeners: ((locked: boolean) => void)[] = [];
 let anyGesture: (() => void)[] = [];
+let spikes = new MouseSpikeFilter();
 
 export const Input = {
   init(el: HTMLElement) {
@@ -19,10 +22,14 @@ export const Input = {
     });
     addEventListener('keyup', e => down.delete(e.code));
     addEventListener('blur', () => down.clear());
-    addEventListener('mousemove', e => { if (Input.isLocked) { mdx += e.movementX; mdy += e.movementY; } });
+    addEventListener('mousemove', e => {
+      if (!Input.isLocked) return;
+      const d = spikes.filter(e.movementX, e.movementY);
+      mdx += d.x; mdy += d.y;
+    });
     addEventListener('mousedown', e => { if (e.button === 0) mouseClicked = true; fireGesture(); });
     addEventListener('wheel', e => { scroll += -Math.sign(e.deltaY); }, { passive: true });
-    document.addEventListener('pointerlockchange', () => { for (const l of lockListeners) l(Input.isLocked); });
+    document.addEventListener('pointerlockchange', () => { spikes = new MouseSpikeFilter(); for (const l of lockListeners) l(Input.isLocked); });
   },
   isPressed: (code: string) => down.has(code),
   wasPressed: (code: string) => pressed.has(code),
@@ -33,7 +40,14 @@ export const Input = {
   get isLocked() { return canvas != null && document.pointerLockElement === canvas; },
   lockPointer() {
     if (!canvas || Input.isLocked) return;
-    try { const p = (canvas as HTMLElement & { requestPointerLock(o?: object): Promise<void> | void }).requestPointerLock(); if (p instanceof Promise) p.catch(() => {}); } catch { /* ignored */ }
+    // Raw (unadjusted) mouse movement: no OS acceleration, like Unity's Mouse.delta on Windows, and it avoids the
+    // Chromium pointer-lock glitch that reports huge fake jumps. Fall back to a normal lock where unsupported.
+    const el = canvas as HTMLElement & { requestPointerLock(o?: { unadjustedMovement?: boolean }): Promise<void> | void };
+    const plain = () => { try { const q = el.requestPointerLock(); if (q instanceof Promise) q.catch(() => {}); } catch { /* ignored */ } };
+    try {
+      const p = el.requestPointerLock({ unadjustedMovement: true });
+      if (p instanceof Promise) p.catch((err: DOMException) => { if (err?.name === 'NotSupportedError') plain(); });
+    } catch { plain(); }
   },
   unlockPointer() { if (Input.isLocked) document.exitPointerLock(); },
   onLockChange(f: (locked: boolean) => void) { lockListeners.push(f); },

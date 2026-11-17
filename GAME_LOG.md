@@ -72,3 +72,17 @@ tests/                      node --test unit tests (npm test)
   Tests: 24/24 passing (`npm test`). Type-check clean.
 - **Needs a human check**: mouse-look feel (headless browsers can't capture the mouse), audio levels, overall
   lighting/colour vs. the Unity build, frame rate on your PC.
+- **2026-11-17 (fixes after first play-test)**: User reported 3 problems; investigated each before changing code.
+  1. **Jumps random / sometimes huge launches.** Root cause: `moveTowardsV` (src/core/math.ts) reused its output vector
+     as its delta, so steering in the air *multiplied* the current speed every physics step (measured 4.5 → 20 m/s),
+     and ground acceleration produced scrambled speeds. Fixed; 3 regression tests added. Re-measured in game: air speed
+     never exceeds 4.6 m/s, flat jump ≈ 5 m long / 1.48 m high (same as Unity).
+  2. **World mirrored (clockwise instead of Unity's counter-clockwise).** three.js is right-handed, Unity left-handed.
+     Fix: the canvas is shown flipped (`transform: scaleX(-1)` in index.html), 3D text is drawn pre-mirrored, and the
+     two control workarounds were removed (camera yaw and strafe now use Unity's exact math). Verified against the Unity
+     report screenshots: mountain on the left of the path, counter-clockwise climb, signs readable, D moves right.
+  3. **Mouse look snaps to a new direction (Brave).** Camera math verified smooth at every angle (1° in = 1° out).
+     Cause is the Chromium/Windows pointer-lock glitch (one huge fake movementX). Fix: request raw `unadjustedMovement`
+     (also matches Unity's raw mouse delta) + `MouseSpikeFilter` that drops a single impossible jump (3 tests).
+     Needs the user's confirmation, since headless browsers can't capture the mouse.
+  Also fixed: menu subtitle "a penguin's worst day" was clipped off the left edge. Tests: 30/30.

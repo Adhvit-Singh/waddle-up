@@ -107,13 +107,13 @@ export class ThirdPersonCamera {
     if (playing) {
       const d = Input.mouseDelta;
       const dx = d.x * 0.09 * GameSettings.sensitivity, dy = -d.y * 0.09 * GameSettings.sensitivity; // browser y is down
-      this.yaw -= dx; // mirrored world: screen-right turns the other way in three.js
+      this.yaw += dx;
       this.pitch += GameSettings.invertY ? dy : -dy;
       const scroll = Input.scrollY;
       if (Math.abs(scroll) > 0.01) this.distance = clamp(this.distance - sign(scroll) * 0.6, 3, 11);
       const gp = Input.gamepad();
       if (gp) {
-        this.yaw -= gp.right.x * 160 * dt * GameSettings.sensitivity;
+        this.yaw += gp.right.x * 160 * dt * GameSettings.sensitivity;
         this.pitch -= gp.right.y * 110 * dt * GameSettings.sensitivity;
       }
     }
