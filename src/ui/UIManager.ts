@@ -11,6 +11,8 @@ import { SaveSystem, type SaveData } from '../core/SaveSystem.ts';
 import { AudioManager } from '../audio/AudioManager.ts';
 import { chaosModeName } from '../trolls/ControlChaos.ts';
 import { resumeDodges } from '../core/pauseRules.ts';
+import { CATALOG, CATEGORY_ORDER, CATEGORY_LABEL, DEFAULT_OUTFIT, type Category, type OutfitIds } from '../player/cosmetics/Catalog.ts';
+import { Outfit } from '../player/cosmetics/Outfit.ts';
 import {
   UIColors, rect, stretch, image, panel, label, text, button, column, sliderRow, optionRow, DodgeButton, setPos, place, type Txt,
 } from './UIFactory.ts';
@@ -29,6 +31,11 @@ export interface GameForUI {
   penguinHanging(): boolean;
   grip01(): number;
   tierTop(): number;
+  /** switch the camera to/from the wardrobe orbit */
+  wardrobeCamera(on: boolean): void;
+  /** dress the penguin (and remember it) */
+  setOutfit(o: OutfitIds): void;
+  readonly outfit: OutfitIds;
 }
 
 const BAD_TIPS = [
@@ -53,6 +60,8 @@ export class UIManager {
   private root!: HTMLElement;
   private menu!: HTMLElement; private hud!: HTMLElement; private pause!: HTMLElement; private settings!: HTMLElement; private how!: HTMLElement;
   private credits!: HTMLElement; private confirmEl!: HTMLElement; private stats!: HTMLElement; private fakeWin!: HTMLElement;
+  private wardrobe!: HTMLElement; private wardrobeFrom: HTMLElement | null = null; private wardrobeTab: Category = 'hat';
+  private wardrobeList!: HTMLElement; private wardrobeTabs: Partial<Record<Category, HTMLElement>> = {};
   private fadeEl!: HTMLElement; private blackoutEl!: HTMLElement; private blackoutText!: Txt;
   private fadeA = 1; private fadeColor = 'rgb(0,0,0)';
   private crashEl!: HTMLElement; private crashDots!: Txt; private saveEl!: HTMLElement; private saveFill!: HTMLElement;
@@ -99,7 +108,7 @@ export class UIManager {
     addEventListener('resize', () => this.layout());
     this.layout();
     this.buildHUD(); this.buildMenu(); this.buildPause(); this.buildSettings(); this.buildHow(); this.buildCredits();
-    this.buildConfirm(); this.buildStats(); this.buildFakeWin(); this.buildOverlays();
+    this.buildConfirm(); this.buildStats(); this.buildFakeWin(); this.buildWardrobe(); this.buildOverlays();
     this.hideAll();
   }
 
@@ -113,7 +122,7 @@ export class UIManager {
   }
 
   private screen(name: string) { const el = stretch(name, this.root); el.classList.add('screen'); return el; }
-  private hideAll() { for (const g of [this.menu, this.hud, this.pause, this.settings, this.how, this.credits, this.confirmEl, this.stats, this.fakeWin]) show(g, false); }
+  private hideAll() { for (const g of [this.menu, this.hud, this.pause, this.settings, this.how, this.credits, this.confirmEl, this.stats, this.fakeWin, this.wardrobe]) show(g, false); }
 
   // =================================================================== HUD
 
@@ -367,13 +376,14 @@ export class UIManager {
     const sub = text('Sub', t, [0, 1], [118, -280], [900, 50], 'a penguin\'s worst day', 40, UIColors.Ice, 'ul', 'i');
     place(sub.parentElement!, [0, 1], [118, -280], [900, 50], [0, 1]);
 
-    const col = column('Buttons', t, [0, 0.5], [110, -130], 480, 14, [0, 0.5]);
-    this.continueBtn = button(col, 'CONTINUE', () => this.gm.continueGame(), 480, 78, css(0.95, 0.5, 0.15), 36);
-    button(col, 'NEW GAME', () => this.onNewGame(), 480, 78, undefined, 34);
-    button(col, 'SETTINGS', () => this.openSettings(this.menu), 480, 70);
-    button(col, 'HOW TO PLAY', () => { show(this.menu, false); show(this.how, true); }, 480, 70);
-    button(col, 'CREDITS', () => { show(this.menu, false); this.rollCredits(() => this.showMenu()); }, 480, 70);
-    button(col, 'QUIT', () => this.confirm('Are you sure? The penguin will be sad.', () => this.quit()), 480, 70, css(0.35, 0.18, 0.22));
+    const col = column('Buttons', t, [0, 0.5], [110, -110], 480, 10, [0, 0.5]);
+    this.continueBtn = button(col, 'CONTINUE', () => this.gm.continueGame(), 480, 66, css(0.95, 0.5, 0.15), 34);
+    button(col, 'NEW GAME', () => this.onNewGame(), 480, 66, undefined, 32);
+    button(col, 'WARDROBE', () => this.openWardrobe(this.menu), 480, 60, css(0.55, 0.3, 0.75));
+    button(col, 'SETTINGS', () => this.openSettings(this.menu), 480, 60);
+    button(col, 'HOW TO PLAY', () => { show(this.menu, false); show(this.how, true); }, 480, 60);
+    button(col, 'CREDITS', () => { show(this.menu, false); this.rollCredits(() => this.showMenu()); }, 480, 60);
+    button(col, 'QUIT', () => this.confirm('Are you sure? The penguin will be sad.', () => this.quit()), 480, 60, css(0.35, 0.18, 0.22));
 
     const ms = rect('Stats', t, [0, 0], [110, 60], [1200, 40], [0, 0]);
     this.menuStats = label(ms, '', 26, UIColors.Dim, 'ml');
@@ -417,6 +427,7 @@ export class UIManager {
     const resume = button(holder, 'RESUME', () => this.gm.setPaused(false), 460, 74, css(0.95, 0.5, 0.15), 34);
     resume.classList.remove('flow');
     this.resumeDodge = new DodgeButton(resume, () => this.toast('Fine. You can resume.', UIColors.Dim, 0.6));
+    button(col, 'WARDROBE', () => this.openWardrobe(this.pause), 460, 68, css(0.55, 0.3, 0.75));
     button(col, 'SETTINGS', () => this.openSettings(this.pause), 460, 68);
     button(col, 'HOW TO PLAY', () => { show(this.pause, false); show(this.how, true); this.settingsReturn = this.pause; }, 460, 68);
     button(col, 'GIVE UP (RESTART)', () => this.confirm('Restart from the very bottom?', () => this.gm.newGame()), 460, 68, css(0.35, 0.18, 0.22));
@@ -437,6 +448,7 @@ export class UIManager {
   /** Esc while in a submenu goes back one level. Returns true if handled. */
   back(): boolean {
     if (shown(this.confirmEl)) { show(this.confirmEl, false); return true; }
+    if (shown(this.wardrobe)) { this.closeWardrobe(); return true; }
     if (shown(this.settings)) { this.closeSettings(); return true; }
     if (shown(this.how)) { show(this.how, false); show(this.settingsReturn === this.pause ? this.pause : this.menu, true); this.settingsReturn = null; return true; }
     if (shown(this.credits) && !this.creditsRolling) { show(this.credits, false); this.showMenu(); return true; }
@@ -491,6 +503,82 @@ export class UIManager {
     show(this.settingsReturn ?? this.menu, true);
     this.settingsReturn = null;
   }
+
+  // =================================================================== WARDROBE
+
+  private buildWardrobe() {
+    this.wardrobe = this.screen('Wardrobe');
+    this.wardrobe.style.pointerEvents = 'none';
+    const p = panel('Panel', this.wardrobe, [0, 0.5], [0, 0], [820, 960]);
+    place(p, [0, 0.5], [40, 0], [820, 960], [0, 0.5]);
+    p.style.pointerEvents = 'auto';
+    text('Title', p, [0.5, 1], [0, -55], [760, 70], 'WARDROBE', 56, '#fff', 'mc', 'b');
+    text('Sub', p, [0.5, 1], [0, -105], [760, 36], 'everything is free. dignity not included.', 24, UIColors.Ice, 'mc', 'i');
+    // category tabs
+    const tabs = rect('Tabs', p, [0.5, 1], [0, -160], [780, 56]);
+    CATEGORY_ORDER.forEach((c, i) => {
+      const t = rect('Tab_' + c, tabs, [0, 0.5], [i * 130 + 2, 0], [124, 52], [0, 0.5]);
+      t.classList.add('btn');
+      image(t, UIColors.Button);
+      label(t, CATEGORY_LABEL[c], 22, UIColors.Text, 'mc', 'b');
+      t.addEventListener('click', e => { e.stopPropagation(); AudioManager.play('click', 0.6); this.wardrobeTab = c; this.refreshWardrobe(); });
+      this.wardrobeTabs[c] = t;
+    });
+    // item list (scrolls)
+    this.wardrobeList = rect('List', p, [0.5, 0.5], [0, -20], [780, 640]);
+    this.wardrobeList.style.overflowY = 'auto';
+    this.wardrobeList.style.pointerEvents = 'auto';
+    // bottom buttons
+    const bRand = button(p, 'RANDOMISE', () => { this.gm.setOutfit(Outfit.random()); this.refreshWardrobe(); }, 240, 64, css(0.55, 0.3, 0.75), 26);
+    place(bRand, [0.5, 0], [-260, 55], [240, 64]); bRand.classList.remove('flow');
+    const bReset = button(p, 'RESET', () => { this.gm.setOutfit({ ...DEFAULT_OUTFIT }); this.refreshWardrobe(); }, 240, 64, undefined, 26);
+    place(bReset, [0.5, 0], [0, 55], [240, 64]); bReset.classList.remove('flow');
+    const bBack = button(p, 'BACK', () => this.closeWardrobe(), 240, 64, css(0.95, 0.5, 0.15), 26);
+    place(bBack, [0.5, 0], [260, 55], [240, 64]); bBack.classList.remove('flow');
+  }
+
+  private refreshWardrobe() {
+    const cur = this.gm.outfit;
+    for (const c of CATEGORY_ORDER) this.wardrobeTabs[c]!.style.background = c === this.wardrobeTab ? css(0.95, 0.5, 0.15) : UIColors.Button;
+    this.wardrobeList.innerHTML = '';
+    const grid = document.createElement('div');
+    grid.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:6px 10px;';
+    this.wardrobeList.appendChild(grid);
+    for (const item of CATALOG[this.wardrobeTab]) {
+      const b = document.createElement('div');
+      b.className = 'btn';
+      b.dataset.name = 'Item_' + item.id;
+      const on = cur[this.wardrobeTab] === item.id;
+      b.style.cssText = `position:relative;height:58px;border-radius:16px;display:flex;align-items:center;justify-content:center;text-align:center;
+        font-size:22px;font-weight:700;color:#fff;padding:0 10px;background:${on ? css(0.95, 0.5, 0.15) : UIColors.Button};${on ? 'outline:3px solid #fff;' : ''}`;
+      b.textContent = (on ? '✓ ' : '') + item.name;
+      b.addEventListener('mouseenter', () => AudioManager.play('hover', 0.5));
+      b.addEventListener('click', e => {
+        e.stopPropagation();
+        AudioManager.play('pop', 0.6);
+        this.gm.setOutfit({ ...this.gm.outfit, [this.wardrobeTab]: item.id });
+        this.refreshWardrobe();
+      });
+      grid.appendChild(b);
+    }
+  }
+
+  openWardrobe(from: HTMLElement) {
+    this.wardrobeFrom = from;
+    show(from, false);
+    show(this.wardrobe, true);
+    this.refreshWardrobe();
+    this.gm.wardrobeCamera(true);
+  }
+
+  private closeWardrobe() {
+    show(this.wardrobe, false);
+    show(this.wardrobeFrom ?? this.menu, true);
+    this.wardrobeFrom = null;
+    this.gm.wardrobeCamera(false);
+  }
+
+  get wardrobeOpen() { return shown(this.wardrobe); }
 
   // =================================================================== HOW TO PLAY
 

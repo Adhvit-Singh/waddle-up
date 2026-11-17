@@ -67,6 +67,30 @@ export class MeshBuilder {
       }
   }
 
+  /** Ellipsoid whose face colours come from a function of the face centre (relative to the ellipsoid centre). */
+  sphereFn(center: THREE.Vector3, radii: THREE.Vector3, colorFn: (mid: THREE.Vector3) => THREE.Color, lon = 8, lat = 6) {
+    const pts: THREE.Vector3[][] = [];
+    for (let i = 0; i < lon; i++) pts.push([]);
+    for (let j = 0; j <= lat; j++) {
+      const phi = Math.PI * j / lat;
+      for (let i = 0; i < lon; i++) {
+        const th = 2 * Math.PI * i / lon;
+        pts[i][j] = new THREE.Vector3(Math.sin(phi) * Math.cos(th) * radii.x, Math.cos(phi) * radii.y, Math.sin(phi) * Math.sin(th) * radii.z);
+      }
+    }
+    const C = (p: THREE.Vector3) => p.clone().add(center);
+    for (let j = 0; j < lat; j++)
+      for (let i = 0; i < lon; i++) {
+        const i2 = (i + 1) % lon;
+        const a = pts[i][j], b = pts[i2][j], d = pts[i2][j + 1], e = pts[i][j + 1];
+        const mid = a.clone().add(b).add(d).add(e).multiplyScalar(0.25);
+        const cc = colorFn(mid);
+        if (j === 0) this.tri(C(a), C(d), C(e), cc, mid);
+        else if (j === lat - 1) this.tri(C(a), C(b), C(d), cc, mid);
+        else this.quad(C(a), C(b), C(d), C(e), cc, mid);
+      }
+  }
+
   /** Cone pointing along +Y from base center. */
   cone(baseCenter: THREE.Vector3, radius: number, height: number, color: THREE.Color, segs = 7, jitter = 0, seed = 0) {
     const rng = new DotNetRandom(seed);

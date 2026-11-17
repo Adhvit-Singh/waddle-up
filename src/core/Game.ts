@@ -17,6 +17,8 @@ import { Effects } from '../world/Effects.ts';
 import { FakeCheckpoint, ShortcutFish, spawnSnowball } from '../world/Interactables.ts';
 import { PenguinController, PState } from '../player/PenguinController.ts';
 import { PenguinVisual } from '../player/PenguinVisual.ts';
+import { Outfit } from '../player/cosmetics/Outfit.ts';
+import type { OutfitIds } from '../player/cosmetics/Catalog.ts';
 import { ThirdPersonCamera, CamMode } from '../player/ThirdPersonCamera.ts';
 import { WindSystem } from '../trolls/WindSystem.ts';
 import { TrapDirector } from '../trolls/TrapDirector.ts';
@@ -409,6 +411,14 @@ export class Game implements GameForUI {
   }
 
   // ------------------------------------------------------------------ GameForUI
+
+  private camBeforeWardrobe: CamMode = CamMode.MenuOrbit;
+  wardrobeCamera(on: boolean) {
+    if (on) { this.camBeforeWardrobe = this.cam.mode; this.cam.mode = CamMode.Wardrobe; PenguinVisual.instance.lookAtPoint = this.camera.position; }
+    else { this.cam.mode = this.camBeforeWardrobe; PenguinVisual.instance.lookAtPoint = null; }
+  }
+  get outfit() { return PenguinVisual.instance.outfit; }
+  setOutfit(o: OutfitIds) { PenguinVisual.instance.applyOutfit(o); Outfit.save(o); }
 
   penguinHeight() { return this.penguin.object.position.y; }
   penguinHanging() { return this.penguin.state === PState.Hang; }

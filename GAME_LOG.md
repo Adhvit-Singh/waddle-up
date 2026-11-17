@@ -121,3 +121,8 @@ tests/                      node --test unit tests (npm test)
   share the rest. Control flips (inverted, mirrored, rotated 90°) last twice as long (24–36 s + up to 16 s higher up).
   Estimated traps per stage (14 landings, 1.5 s apart): stage 2 ≈ 3.3 (was 1.2), stage 10 ≈ 4.9 (was 2.4),
   stage 20 ≈ 6.4 (was 3.5). Tests 65/65; e2e traps/summits/pause pass.
+- **2026-11-18 (wardrobe)**: design `docs/superpowers/specs/2026-11-18-wardrobe-design.md`. WARDROBE button in the main
+  menu and the pause menu. Everything free, purely cosmetic. 6 tabs: COLOUR 14 · EYES 12 · HATS 16 (15 + No Hat) ·
+  OUTFITS 12 · EXTRAS 30 · FEET 10 (`src/player/cosmetics/Catalog.ts`). RANDOMISE / RESET / BACK (or Esc). The camera
+  orbits the penguin (which turns to face you); the outfit is saved in the browser (`wu_outfit`). Main menu buttons
+  slimmed so 7 fit on short screens. Tests 70/70; e2e/wardrobe.mjs (14 checks) + traps/pause/devmenu/summits pass.

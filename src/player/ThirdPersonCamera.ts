@@ -12,7 +12,7 @@ import { PenguinController, PState } from './PenguinController.ts';
 import type { MountainGenerator } from '../world/MountainGenerator.ts';
 import { TrapEffects } from '../trolls/TrapEffects.ts';
 
-export const CamMode = { Follow: 0, MenuOrbit: 1, Cutscene: 2 } as const;
+export const CamMode = { Follow: 0, MenuOrbit: 1, Cutscene: 2, Wardrobe: 3 } as const;
 export type CamMode = (typeof CamMode)[keyof typeof CamMode];
 
 /** Orbit third-person camera with collision, shake, troll flips, a menu orbit and cutscene control. */
@@ -68,6 +68,7 @@ export class ThirdPersonCamera {
     switch (this.mode) {
       case CamMode.Follow: this.updateFollow(dt); break;
       case CamMode.MenuOrbit: this.updateMenu(dt); break;
+      case CamMode.Wardrobe: this.updateWardrobe(dt); break;
       case CamMode.Cutscene: {
         this.cam.position.lerp(this.cutPos, 1 - Math.exp(-this.cutLerp * dt));
         const want = lookRotation(this.cutLook.clone().sub(this.cam.position));
@@ -94,6 +95,26 @@ export class ThirdPersonCamera {
     this.cam.up.copy(up);
     this.cam.lookAt(this.cam.position.clone().add(fwd));
     this.cam.updateMatrixWorld();
+  }
+
+  private wardrobeT = 0;
+  /** Wardrobe: swing slowly back and forth on the open-air side of the penguin, framed to the right of the screen */
+  private updateWardrobe(dt: number) {
+    if (!this.target) return;
+    this.wardrobeT += dt;
+    const p = this.target.position;
+    const out = new THREE.Vector3(p.x, 0, p.z);
+    if (out.lengthSq() < 0.01) out.set(1, 0, 0);
+    out.normalize();
+    const a = Math.sin(this.wardrobeT * 0.35) * 1.1;                    // ±63° around "outward"
+    const dir = out.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), a);
+    const pos = p.clone().addScaledVector(dir, 2.9).add(new THREE.Vector3(0, 2.3, 0));   // high enough to look over the start sign
+    const look = p.clone().add(new THREE.Vector3(0, 0.65, 0));
+    const right = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), look.clone().sub(pos)).normalize();
+    look.addScaledVector(right, -0.95);   // the picture is shown flipped (Unity-handed): this puts the penguin RIGHT of centre
+    this.cam.position.lerp(pos, 1 - Math.exp(-4 * dt));
+    this.rot.slerp(lookRotation(look.sub(this.cam.position)), 1 - Math.exp(-5 * dt));
+    this.setFov(lerp(this.cam.fov, 50, dt * 3));
   }
 
   private updateMenu(dt: number) {

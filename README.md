@@ -16,6 +16,9 @@ npm run dev      # starts the game at http://localhost:5173
 Open **http://localhost:5173** in Chrome or Edge. Keep the terminal open while you play.
 Code changes reload the page automatically. Press **Ctrl + C** in the terminal to stop.
 
+### Wardrobe
+Main menu or pause menu → **WARDROBE**: colours, eyes, hats, outfits, extras and feet. All free, purely cosmetic, saved in the browser. Add new items in `src/player/cosmetics/Catalog.ts`.
+
 ### Developer menu (only on your PC)
 While running `npm run dev`, press **F10** in a game to open the **DEV MENU**:
 - **Go to stage 1–20**: teleports to that stage's start and raises the tiers it needs.
