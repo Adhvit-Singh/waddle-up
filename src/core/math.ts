@@ -69,3 +69,13 @@ export function projectOnPlaneUp(v: THREE.Vector3) { return new THREE.Vector3(v.
 /** Unity Color * k (rgb only, alpha untouched) */
 export const mulRGB = (c: THREE.Color, k: number) => new THREE.Color(c.r * k, c.g * k, c.b * k);
 export const lerpColor = (a: THREE.Color, b: THREE.Color, t: number) => a.clone().lerp(b, clamp01(t));
+
+/** Unity `new Color(r,g,b)` — raw values, used as-is (linear), exactly like Unity vertex colors. */
+export const col = (r: number, g: number, b: number) => new THREE.Color().setRGB(r, g, b, THREE.LinearSRGBColorSpace);
+/** ColorUtility.TryParseHtmlString — raw byte/255 values, no gamma conversion. */
+export function hexCol(hex: string) {
+  const h = hex.replace('#', '');
+  return col(parseInt(h.slice(0, 2), 16) / 255, parseInt(h.slice(2, 4), 16) / 255, parseInt(h.slice(4, 6), 16) / 255);
+}
+export const WHITE = () => col(1, 1, 1);
+export const BLACK = () => col(0, 0, 0);
