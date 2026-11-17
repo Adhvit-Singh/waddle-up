@@ -27,10 +27,12 @@ export const RIGHT = Object.freeze(new THREE.Vector3(1, 0, 0)) as THREE.Vector3;
 
 /** Vector3.MoveTowards */
 export function moveTowardsV(cur: THREE.Vector3, target: THREE.Vector3, maxDelta: number, out = new THREE.Vector3()) {
-  const d = out.copy(target).sub(cur);
-  const len = d.length();
+  // compute the delta in locals first: `out` may be the same object as `cur`
+  const dx = target.x - cur.x, dy = target.y - cur.y, dz = target.z - cur.z;
+  const len = Math.sqrt(dx * dx + dy * dy + dz * dz);
   if (len <= maxDelta || len === 0) return out.copy(target);
-  return out.copy(cur).addScaledVector(d, maxDelta / len);
+  const k = maxDelta / len;
+  return out.set(cur.x + dx * k, cur.y + dy * k, cur.z + dz * k);
 }
 
 /** Vector3.RotateTowards (magnitude delta ignored for unit vectors) */
