@@ -12,6 +12,9 @@ async function boot() {
   game.init();
   document.getElementById('loading')?.remove();
   game.start();
-  if (import.meta.env.DEV) (window as unknown as { __wu: Game }).__wu = game;
+  if (import.meta.env.DEV) {
+    (window as unknown as { __wu: Game }).__wu = game;
+    import('./dev/DevMenu.ts').then(m => m.installDevMenu(game));
+  }
 }
 boot();

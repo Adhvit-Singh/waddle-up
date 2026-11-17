@@ -86,3 +86,18 @@ tests/                      node --test unit tests (npm test)
      (also matches Unity's raw mouse delta) + `MouseSpikeFilter` that drops a single impossible jump (3 tests).
      Needs the user's confirmation, since headless browsers can't capture the mouse.
   Also fixed: menu subtitle "a penguin's worst day" was clipped off the left edge. Tests: 30/30.
+- **2026-11-18 (round 2, branch web-port)** — plan: `docs/superpowers/plans/2026-11-18-round2.md`
+  - Bouncy ledges now bounce (landing overwrote the launch). e2e/bounce.mjs.
+  - Traps: none on stage 1; 10%→45% chance per new ledge from stage 2; 4 s cooldown; never repeats at a ledge in one
+    game; last game's (ledge, trap) pairs avoided (`wu_lasttraps`); Trapdoor → start of current stage.
+    8 new traps: Seagull, Fall-through ledge, Tilting ledge, Slippery grab, Camera troll (zoom / upside-down),
+    Input delay, Fake crash, Fake "save corrupted" (real save untouched). e2e/traps.mjs fires all 20: ALL PASS.
+  - Mountain: tiers taper into a peak; rock carved inward into gullies/ribs; trail band; rim crags; granite colours;
+    patchy snow; procedural rock grain. Tests prove every jump is identical (rise/gap/size), no rock in any ledge's
+    space, no flat rock to get stuck on. Rocky outcrop ledges (exact walkable top).
+  - Hills + small mountains, 3x instanced forest on the real ground, 330 decorative pines on the mountain (no collision).
+  - DEV MENU (F10): only in `npm run dev` — jump to any stage / fire any trap. Not in the deployed build (tests/dist.test.ts).
+  - e2e/summits.mjs: full flow ALL PASS. Tests 50/50.
+  - Found, NOT changed (from the original Unity layout): 3 low-headroom spots on the top tier near stage 18
+    (ledge 259 sits 1.66 m / 1.88 m above ledges 248/247; 254 is 2.45 m above 241). Ask the user.
+  - Left for next time: final whole-branch review, README section on the dev menu.
