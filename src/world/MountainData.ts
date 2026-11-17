@@ -3,6 +3,7 @@ import { DotNetRandom } from '../core/rng.ts';
 import { STAGES, TIER_COUNT, LedgeKind, type StageDef } from '../core/StageData.ts';
 import { col, lerp, inverseLerp, lerpColor, mulRGB, lookRotation, yawOf, UP } from '../core/math.ts';
 import { MeshBuilder } from './MeshKit.ts';
+import { ridged, fbm, noise3 } from './noise.ts';
 
 export const SEED = 20261117;
 export const JUMP_V = 5.3, MOVE_SPEED = 4.6, G = 9.81;
@@ -30,6 +31,10 @@ export interface SignSpec { tier: number; pos: THREE.Vector3; rot: THREE.Quatern
 export interface FlagSpec { tier: number; pos: THREE.Vector3; height: number; color: THREE.Color; label: string | null; labelScale: number; checkpointStage: number | null; }
 export interface PointSpec { tier: number; pos: THREE.Vector3; color?: THREE.Color; }
 export interface TierBody { tier: number; mesh: MeshBuilder; }
+/** A jagged rock spire on a plateau rim (decoration with a collider). */
+export interface CragSpec { tier: number; pos: THREE.Vector3; height: number; radius: number; seed: number; }
+/** Space around a ledge that rock may never enter: its jump space and headroom (angles in radians). */
+export interface Corridor { tier: number; ledge: number; angle: number; halfSpan: number; yMin: number; yMax: number; }
 
 export interface MountainData {
   ledges: LedgeSpec[];
@@ -39,6 +44,8 @@ export interface MountainData {
   spawnPoint: THREE.Vector3; spawnYaw: number;
   signs: SignSpec[]; flags: FlagSpec[]; fish: PointSpec[]; glows: PointSpec[];
   bodies: TierBody[];
+  corridors: Corridor[];
+  crags: CragSpec[];
 }
 
 interface Step { kind: LedgeKind; stage: number; rise: number; gap: number; depth: number; length: number; thick: number; top: number; }
@@ -52,7 +59,7 @@ export function generateMountain(): MountainData {
   const tiers: TierInfo[] = [];
   const out: MountainData = {
     ledges: [], extraLedges: [], tiers, stageMinY, stageMaxY, spawnPoint: new THREE.Vector3(), spawnYaw: 0,
-    signs: [], flags: [], fish: [], glows: [], bodies: [],
+    signs: [], flags: [], fish: [], glows: [], bodies: [], corridors: [], crags: [],
   };
 
   function makeStep(k: LedgeKind, diff: number, stage: number, isStart: boolean): Step {
@@ -121,8 +128,10 @@ export function generateMountain(): MountainData {
 
     // ---------- 2. tier shape
     switch (t) {
-      case 0: tier.rTop = 34; tier.rBase = tier.rTop + tier.height * f(0.3); break;
-      case 1: tier.rBase = 24; tier.rTop = 15; break;
+      // round 2: tiers taper much more so the mountain reads as a peak, not a cylinder (jumps are unchanged: gaps and
+      // rises come from the step list, the radius only sets how tightly the trail winds)
+      case 0: tier.rTop = 22; tier.rBase = tier.rTop + tier.height * 0.38; break;
+      case 1: tier.rBase = 21; tier.rTop = 12.5; break;
       default: tier.rBase = 11.5; tier.rTop = 5.5; break;
     }
 
@@ -150,7 +159,23 @@ export function generateMountain(): MountainData {
     tier.arrivalAngle = angle;
 
     // ---------- 4. mountain body
-    out.bodies.push({ tier: t, mesh: buildTierMesh(tier, stageMaxY) });
+    for (const l of [...out.ledges, ...out.extraLedges]) {
+      if (l.tier !== t) continue;
+      const r = Math.hypot(l.pos.x, l.pos.z);
+      out.corridors.push({ tier: t, ledge: l.index, angle: Math.atan2(l.pos.z, l.pos.x), halfSpan: (l.size.z / 2 + 0.6) / r, yMin: l.pos.y - l.size.y - 0.5, yMax: l.pos.y + 3.0 });
+    }
+    out.bodies.push({ tier: t, mesh: buildTierMesh(tier, stageMaxY, out.corridors.filter(c => c.tier === t)) });
+
+    // ---------- 4b. jagged crags around the plateau rim (fake summits only), clear of the arrival / flag / next-tier start
+    if (t < TIER_COUNT - 1) {
+      const n = t === 0 ? 14 : 9;
+      for (let k = 0; k < n; k++) {
+        const a = tier.arrivalAngle + 1.0 + (2 * Math.PI - 2.0) * (k + 0.5) / n + (noise3(k, t, 1, SEED) - 0.5) * 0.25;
+        const rr = tier.rTop - 1.2 - noise3(k, t, 2, SEED) * 1.5;
+        const h = (t === 0 ? 4 : 3) + noise3(k, t, 3, SEED) * (t === 0 ? 7 : 4);
+        out.crags.push({ tier: t, pos: new THREE.Vector3(Math.cos(a) * rr, tier.topY - 0.3, Math.sin(a) * rr), height: h, radius: 1.4 + h * 0.22, seed: SEED + t * 100 + k });
+      }
+    }
 
     // ---------- 5. summit flag
     if (t < TIER_COUNT - 1) {
@@ -208,48 +233,135 @@ function decorateRest(out: MountainData, ledge: LedgeSpec, def: StageDef, stage:
   }
 }
 
+/** natural rock: a neutral grey-brown granite, only faintly tinted by the stage, blended smoothly between stages */
+const GRANITE = col(0.47, 0.45, 0.43);
 function rockColorAt(y: number, tier: TierInfo, stageMaxY: number[]) {
-  for (let s = tier.firstStage; s <= tier.lastStage; s++)
-    if (y <= stageMaxY[s] + 0.5)
-      return mulRGB(lerpColor(STAGES[s].rock, col(0.45, 0.45, 0.52), 0.2), 0.92);
-  return lerpColor(STAGES[tier.lastStage].rock, col(1, 1, 1), 0.3);
+  let s = tier.lastStage;
+  for (let k = tier.firstStage; k <= tier.lastStage; k++) if (y <= stageMaxY[k] + 0.5) { s = k; break; }
+  const next = Math.min(tier.lastStage, s + 1);
+  const t = Math.min(1, Math.max(0, (y - (stageMaxY[s] - 6)) / 12));          // 12 m soft blend into the next stage
+  const tint = lerpColor(STAGES[s].rock, STAGES[next].rock, t);
+  return lerpColor(GRANITE, tint, 0.28);
 }
 
-function buildTierMesh(tier: TierInfo, stageMaxY: number[]) {
-  const r = new DotNetRandom(SEED + tier.index * 1000);
+/** per-vertex deterministic jitter in [0,1) */
+const jitter = (i: number, j: number, k: number, seed: number) => noise3(i * 1.618 + 0.5, j * 2.414 + 0.5, k * 3.141 + 0.5, seed);
+
+/**
+ * A natural craggy tier: the old smooth slope plus ridged rock ribs (spurs), gullies, cliff bands and facet jitter.
+ * Hard rules (tested): rock never enters a ledge corridor, and off-path rock is always too steep to stand on.
+ */
+function buildTierMesh(tier: TierInfo, stageMaxY: number[], corridors: Corridor[]) {
+  const seed = SEED + tier.index * 1000;
   const bottom = tier.baseY - (tier.index === 0 ? 2 : 3);
   const height = tier.topY - bottom;
-  const rings = Math.max(4, Math.ceil(height / 6.5));
-  const segs = Math.min(48, Math.max(14, Math.round(2 * Math.PI * tier.rBase / 6.5)));
-  const pts: THREE.Vector3[][] = [];
-  for (let i = 0; i < segs; i++) pts.push([]);
+  const rings = Math.max(8, Math.ceil(height / 2));   // ring spacing (2 m) > cell width (~1 m): no shelf-like faces
+  const dy = height / rings;
+  const segs = Math.min(360, Math.max(72, Math.round(2 * Math.PI * tier.rBase / 1.0)));
+  const cell = 2 * Math.PI / segs;
+  const carveAmp = [8, 5.5, 3.2][tier.index] ?? 3;   // how deep gullies/notches cut in between the trail loops
+  const MAX_OUT_PER_M = 0.5;                     // dr/dy limit: keeps every face steeper than walkable (normal.y < 0.6)
+
+  const R: number[][] = [], Y: number[][] = [], TH: number[][] = [], D: number[][] = [];
+  const FIX: boolean[][] = [];
+  for (let i = 0; i < segs; i++) { R.push([]); Y.push([]); TH.push([]); D.push([]); FIX.push([]); }
+
+  const inCorridor = (th: number, y: number) => {
+    for (const c of corridors) {
+      if (y < c.yMin - dy * 1.1 || y > c.yMax + dy * 1.1) continue;
+      let d = th - c.angle; d = Math.atan2(Math.sin(d), Math.cos(d));
+      if (Math.abs(d) <= c.halfSpan + cell * 1.6) return true;
+    }
+    return false;
+  };
+
   for (let j = 0; j <= rings; j++) {
-    const yy = lerp(bottom, tier.topY, j / rings);
+    const yy = bottom + dy * j;
     for (let i = 0; i < segs; i++) {
       const th = 2 * Math.PI * (i + (j % 2) * 0.5) / segs;
-      const jit = j === rings ? 0 : r.nextDouble() * 1.05 - 0.9;
-      let rr = tier.slopeR(Math.max(yy, tier.baseY)) + jit;
-      if (j === 0) rr += 0.8;
-      const yj = (j === 0 || j === rings) ? yy : yy + (r.nextDouble() - 0.5) * 2.0;
-      pts[i][j] = new THREE.Vector3(Math.cos(th) * rr, yj, Math.sin(th) * rr);
+      const y = (j === 0 || j === rings) ? yy : yy + (jitter(i, j, 1, seed) - 0.5) * dy * 0.15;
+      const base = tier.slopeR(Math.max(y, tier.baseY));
+      const nx = Math.cos(th) * base, nz = Math.sin(th) * base;
+      // vertical rock ribs (spurs) + gullies + cliff bands + facets
+      // rock is CARVED INWARD between the trail loops (gullies/notches), leaving ribs standing; it never bulges out
+      // more than ~0.8 m, so a falling penguin still lands on the trail below (ledges stick out 0.6–4 m)
+      const ribs = ridged(nx * 0.03, y * 0.012, nz * 0.03, 3, seed + 1);          // 1 = crest of a rock rib
+      const fine = ridged(nx * 0.09, y * 0.03, nz * 0.09, 2, seed + 4);
+      const notch = fbm(nx * 0.04, y * 0.06, nz * 0.04, 3, seed + 2);
+      const band = fbm(nx * 0.02, y * 0.11, nz * 0.02, 2, seed + 3);
+      let d = -carveAmp * Math.pow(1 - ribs, 0.7) - Math.max(0, notch) * carveAmp * 0.7 - (1 - fine) * 1.4 + Math.max(0, band) * 0.6 + (jitter(i, j, 2, seed) - 0.5) * 0.9;
+      d = Math.min(d, 0.3);   // never sticks out past even the thinnest beam (0.55 m)
+      // the foot of the mountain flares out into scree instead of meeting the ground in a hard edge
+      if (tier.index === 0) d += Math.pow(Math.max(0, 14 - (y - tier.baseY)), 1.5) * 0.3;
+      if (j === rings) d = 0;                       // plateau rim stays exactly at rTop (summit checks + rising tiers)
+      let r = base + d;
+      if (j === 0) r += 0.8;
+      const fix = inCorridor(th, y);
+      if (fix) r = tier.slopeR(y) + 0.1;   // the trail band: rock flush behind every ledge
+      if (j === rings) r = tier.rTop;      // plateau rim
+      FIX[i][j] = fix || j === rings;
+      R[i][j] = r; Y[i][j] = y; TH[i][j] = th; D[i][j] = d;
     }
   }
+
+  // smoothness rule between vertically connected vertices: a lower vertex may stick out at most K per metre beyond
+  // the one above it (keeps every face steeper than walkable: no shelves to get stuck on). Trail-band and rim vertices
+  // are fixed; free vertices are pushed out/in until the rule holds (rock fills smoothly between carved notches).
+  const K = 0.5;
+  const ups = (i: number, j: number) => (j % 2 === 0 ? [i, (i + segs - 1) % segs] : [i, (i + 1) % segs]);
+  for (let pass = 0; pass < 60; pass++) {
+    let worst = 0;
+    for (let j = 0; j < rings; j++)
+      for (let i = 0; i < segs; i++)
+        for (const u of ups(i, j)) {
+          const lim = K * Math.max(0.01, Y[u][j + 1] - Y[i][j]);
+          const excess = R[i][j] - R[u][j + 1] - lim;       // > 0: (i,j) juts out under (u,j+1) like a shelf
+          if (excess <= 1e-6) continue;
+          worst = Math.max(worst, excess);
+          const lowFixed = FIX[i][j], upFixed = FIX[u][j + 1];
+          if (lowFixed && upFixed) continue;                 // two fixed trail vertices: already a steep cut
+          if (lowFixed) R[u][j + 1] += excess;               // fill the rock above out
+          else if (upFixed) R[i][j] -= excess;               // carve the rock below in
+          else { R[i][j] -= excess / 2; R[u][j + 1] += excess / 2; }
+        }
+    if (worst < 1e-4) break;
+  }
+
+  const pts: THREE.Vector3[][] = [];
+  for (let i = 0; i < segs; i++) { pts.push([]); for (let j = 0; j <= rings; j++) pts[i][j] = new THREE.Vector3(Math.cos(TH[i][j]) * R[i][j], Y[i][j], Math.sin(TH[i][j]) * R[i][j]); }
+
+
+
   const mb = new MeshBuilder();
-  const snow = col(0.93, 0.96, 1);
+  const snow = col(0.93, 0.96, 1), snowShade = col(0.84, 0.89, 0.97), ice = col(0.72, 0.86, 0.96);
+  const tmp = new THREE.Vector3();
+  const face = (a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vector3, dd: number) => {
+    const outward = tmp.copy(a).add(b).add(c).multiplyScalar(1 / 3); outward.y = 0;
+    const n = new THREE.Vector3().crossVectors(b.clone().sub(a), c.clone().sub(a)).normalize();
+    if (n.dot(outward) < 0) n.negate();
+    const yMid = (a.y + b.y + c.y) / 3;
+    const h01 = (yMid - tier.baseY) / Math.max(1, tier.topY - tier.baseY);
+    const cx = outward.x, cz = outward.z;
+    let rock = rockColorAt(yMid, tier, stageMaxY);
+    // crevices (pulled-in rock) darker, buttresses lighter, plus blotchy variation
+    rock = mulRGB(rock, 0.8 + noise3(cx * 0.3, yMid * 0.3, cz * 0.3, seed + 7) * 0.28 + Math.max(-0.22, Math.min(0.15, dd * 0.05)));
+    // patchy snow: on the less steep faces, more of it higher up and on the top tier
+    const snowChance = -0.2 + h01 * 0.3 + tier.index * 0.18 + (n.y - 0.3) * 1.4;
+    const patch = noise3(cx * 0.12, yMid * 0.12, cz * 0.12, seed + 9);
+    let c1 = rock;
+    if (patch < snowChance) c1 = n.y > 0.3 ? snow : snowShade;
+    else if (tier.index === 2 && patch < snowChance + 0.18) c1 = ice;
+    mb.tri(a, b, c, c1, outward.clone());
+  };
   for (let j = 0; j < rings; j++)
     for (let i = 0; i < segs; i++) {
       const i2 = (i + 1) % segs;
       const a = pts[i][j], b = pts[i2][j], c = pts[i2][j + 1], d = pts[i][j + 1];
-      const yMid = (a.y + c.y) * 0.5;
-      const rock = rockColorAt(yMid, tier, stageMaxY);
-      const n = r.nextDouble();
-      const c1 = n < 0.1 ? snow : mulRGB(rock, 0.88 + r.nextDouble() * 0.2);
-      const c2 = n > 0.9 ? snow : mulRGB(rock, 0.85 + r.nextDouble() * 0.2);
-      const outward = a.clone().add(c).multiplyScalar(0.5); outward.y = 0;
-      mb.tri(a, b, c, c1, outward);
-      mb.tri(a, c, d, c2, outward);
+      const dd = (D[i][j] + D[i2][j + 1]) / 2;
+      face(a, b, c, dd);
+      face(a, c, d, dd);
     }
-  // flat plateau cap
+  // flat plateau cap (walkable on purpose: summit flag + the next tier rises out of it)
   const center = new THREE.Vector3(0, tier.topY, 0);
   for (let i = 0; i < segs; i++) {
     const sc = (i % 3 === 0) ? col(0.88, 0.92, 0.98) : snow;

@@ -61,7 +61,7 @@ export class WorldDecor {
   build() {
     // ---- sun (Unity Euler 48, -35, 0; light travels along its +Z)
     this.sunDir.set(0, 0, 1).applyQuaternion(eulerDeg(48, -35, 0));
-    this.sun = new THREE.DirectionalLight(SUN.clone(), 1.1 * Math.PI);
+    this.sun = new THREE.DirectionalLight(SUN.clone(), 1.35 * Math.PI);
     this.sun.castShadow = true;
     this.sun.shadow.mapSize.set(2048, 2048);
     const sc = this.sun.shadow.camera as THREE.OrthographicCamera;
@@ -71,7 +71,7 @@ export class WorldDecor {
     this.scene.add(this.sun, this.sun.target);
 
     // ---- ambient (Unity trilight → hemisphere)
-    this.hemi = new THREE.HemisphereLight(srgb(0.46, 0.54, 0.7), srgb(0.28, 0.28, 0.34), Math.PI);
+    this.hemi = new THREE.HemisphereLight(srgb(0.46, 0.54, 0.7), srgb(0.28, 0.28, 0.34), 0.7 * Math.PI);   // a bit less fill light so rock facets read
     this.scene.add(this.hemi);
 
     // ---- sky

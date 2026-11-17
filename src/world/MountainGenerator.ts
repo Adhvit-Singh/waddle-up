@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { Physics, RAPIER } from '../physics/Physics.ts';
-import { generateMountain, type MountainData, type TierInfo, type FlagSpec } from './MountainData.ts';
+import { generateMountain, type MountainData, type TierInfo, type FlagSpec, type CragSpec } from './MountainData.ts';
+import { MeshBuilder } from './MeshKit.ts';
+import { col, mulRGB } from '../core/math.ts';
 import { meshObject } from './MeshKit.ts';
 import { Ledge } from './Ledge.ts';
 import { Props } from './Props.ts';
@@ -67,6 +69,7 @@ export class MountainGenerator {
       const tc = trimeshCollider(b.mesh, { mountain: b.tier, object: this.tiers[b.tier].root });
       this.bodies.push({ tier: b.tier, ...tc });
     }
+    for (const c of d.crags) this.buildCrag(c);
     for (let t = 1; t < this.tiers.length; t++) this.setTierActive(t, false);
   }
 
@@ -81,6 +84,26 @@ export class MountainGenerator {
     Physics.register(c, { object: go });
     this.bodies.push({ tier: f.tier, body, collider: c });
     if (f.checkpointStage !== null) this.checkpointFlags.push({ object: go, stage: f.checkpointStage, tier: f.tier });
+  }
+
+  private buildCrag(c: CragSpec) {
+    const mb = new MeshBuilder();
+    const rock = col(0.47, 0.45, 0.43);
+    mb.cone(new THREE.Vector3(0, -0.5, 0), c.radius, c.height + 0.5, rock, 7, 0.35, c.seed);
+    mb.cone(new THREE.Vector3(c.radius * 0.5, -0.5, c.radius * 0.2), c.radius * 0.55, c.height * 0.6, mulRGB(rock, 0.9), 6, 0.3, c.seed + 1);
+    mb.cone(new THREE.Vector3(0, c.height * 0.72, 0), c.radius * 0.28, c.height * 0.3, col(0.9, 0.93, 0.98), 6, 0.2, c.seed + 2);
+    const m = meshObject('Crag', mb.build(), this.tiers[c.tier].root);
+    m.position.copy(c.pos);
+    m.rotation.y = (c.seed % 628) / 100;
+    const pos = mb.positions();
+    const wp = c.pos;
+    const body = Physics.world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(wp.x, wp.y, wp.z).setRotation(m.quaternion));
+    const hull = RAPIER.ColliderDesc.convexHull(pos);
+    if (!hull) return;
+    const col2 = Physics.world.createCollider(hull, body);
+    body.userData = { base: wp.clone() };
+    Physics.register(col2, { object: m });
+    this.bodies.push({ tier: c.tier, body, collider: col2 });
   }
 
   /** GameObject.SetActive for a whole tier (visibility + colliders). */
