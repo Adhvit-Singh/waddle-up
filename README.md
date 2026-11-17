@@ -16,8 +16,14 @@ npm run dev      # starts the game at http://localhost:5173
 Open **http://localhost:5173** in Chrome or Edge. Keep the terminal open while you play.
 Code changes reload the page automatically. Press **Ctrl + C** in the terminal to stop.
 
-Dev-only cheat keys (they only exist in `npm run dev`, never in the deployed game):
-**F8** = jump to the next stage, **F9** = jump to the last ledge before the current summit.
+### Developer menu (only on your PC)
+While running `npm run dev`, press **F10** in a game to open the **DEV MENU**:
+- **Go to stage 1–20**: teleports to that stage's start and raises the tiers it needs.
+- **Fire trap**: triggers any of the 20 traps on the ledge you're standing on.
+- A run where you used the menu never records a best time.
+
+**F8** (next stage) and **F9** (just below the current summit) also work.
+None of this exists in `npm run build` / the deployed game. `npm test` checks the built files to make sure.
 
 ## Check the real (deployable) version
 
@@ -29,7 +35,9 @@ npm run preview  # serves dist/ at http://localhost:4173 (what friends will get)
 ## Tests
 
 ```bash
-npm test         # mountain matches Unity, RNG matches .NET, saving, trap rules, audio
+npm test                          # unit tests: jumps unchanged, mountain safety rules, trap rules, saving, audio
+node e2e/cdp.mjs e2e/summits.mjs  # browser checks (need `npm run dev` running and Microsoft Edge):
+                                  #   bounce.mjs, traps.mjs, devmenu.mjs, summits.mjs, air-speed.mjs, look.mjs (screenshots)
 ```
 
 ## Deploying (later)
