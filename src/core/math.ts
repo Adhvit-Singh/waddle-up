@@ -79,3 +79,5 @@ export function hexCol(hex: string) {
 }
 export const WHITE = () => col(1, 1, 1);
 export const BLACK = () => col(0, 0, 0);
+/** Unity material / light / fog colors are authored in gamma space and converted — same as three's sRGB input. */
+export const srgb = (r: number, g: number, b: number) => new THREE.Color().setRGB(r, g, b, THREE.SRGBColorSpace);
