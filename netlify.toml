@@ -1,0 +1,15 @@
+# Netlify: how to build and serve Waddle Up.
+# Every push to the live branch rebuilds the game; other branches get a private preview link.
+
+[build]
+  command = "npm run build"   # type-check + Vite production build (no developer menu in it)
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "26"         # same Node.js as the PC the game was built and tested on
+
+# Built game files have a fingerprint in their name, so browsers can keep them for a long time.
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
