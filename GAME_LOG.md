@@ -5,17 +5,20 @@
 ## What this is
 A web remake of the Unity game **Waddle Up** (penguin rage-climber), so friends can play it from a link.
 No Unity. Stack: **Three.js + Rapier physics + TypeScript + Vite**. PC only (keyboard + mouse).
-Faithful port, bugs included. Deploy only after a local test.
+Started as a faithful port (bugs included); since v0.2 it has its own fixes and features (see CHANGELOG.md).
+Deploy only after a local test.
 The Unity project (`D:\UNity GAymes\AR VR  SHITTT`) was only **read**, never modified.
 
 - Full design: [`docs/2026-11-17-waddle-up-web-design.md`](docs/2026-11-17-waddle-up-web-design.md)
 - Build plan: [`docs/superpowers/plans/2026-11-17-waddle-up-web-port.md`](docs/superpowers/plans/2026-11-17-waddle-up-web-port.md)
 - Run / build / deploy instructions + "where do I change X": [`README.md`](README.md)
+- Plain-language list of every major update: [`CHANGELOG.md`](CHANGELOG.md) (current: **v0.8**)
+- Later designs: `docs/superpowers/specs/` (round 2 mountain/traps, round 3 fixes, wardrobe, roles)
 
 ## How to run locally
 1. Open `D:\waddle-up-web` in VS Code (File → Open Folder).
 2. Terminal (Ctrl + `): `npm run dev` (run `npm install` first only on a fresh copy).
-3. Open http://localhost:5173 in Chrome/Edge. Click NEW GAME, then click the game once so it captures the mouse.
+3. Open http://localhost:5173 in Chrome/Edge. Click NEW GAME, pick a role, then click the game once so it captures the mouse.
 4. Stop with Ctrl + C in the terminal.
 
 ## Unity → web: what is the same, what differs
