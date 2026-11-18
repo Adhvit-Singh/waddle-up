@@ -517,6 +517,22 @@ export class PenguinController {
     this.groundLedge = null;
   }
 
+/** Continue after a save made mid-fall: put the penguin back in the air with the same speed and fall height. */
+  resumeFall(pos: THREE.Vector3, vel: THREE.Vector3, peak: number, yaw: number) {
+    this.teleport(pos, yaw);
+    this.body.setLinvel(vel, true);
+    this.relVel.set(vel.x, 0, vel.z);
+    this.airPeakY = Math.max(peak, pos.y);
+    this.lastVy = vel.y;
+  }
+
+  /** current fall state for saving (null when not airborne) */
+  get airState() {
+    if (this.state !== PState.Air && this.state !== PState.Ragdoll) return null;
+    const p = this.position, v = this.velocity;
+    return { x: p.x, y: p.y, z: p.z, vx: v.x, vy: v.y, vz: v.z, peak: this.airPeakY };
+  }
+
   teleport(pos: THREE.Vector3, yaw: number) {
     this.body.setBodyType(RAPIER.RigidBodyType.Dynamic, true);
     this.body.setTranslation(pos, true);

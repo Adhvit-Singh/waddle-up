@@ -132,3 +132,8 @@ tests/                      node --test unit tests (npm test)
   cutscenes still use `launch()`. Tests: every role can make all 296 jumps and can't land >2 ledges ahead (no new skips);
   role data complete; save normalisation. e2e/roles.mjs: role screen, HUD, save, Continue keeps role, Give Up asks again,
   Old 3.68 m/s, Squirrel 5.29 m/s + wanders, Ghost see-through. Older e2e scripts updated to pass the role screen.
+- **2026-11-18 (v0.8)**: save-scum fix. Root cause: saves stored `lastSafePos` (last grounded spot), so pause → Main
+  Menu → Continue mid-fall restored the ledge you fell from. Fix: `SaveData.air` stores position/velocity/fall peak while
+  airborne and Continue resumes the fall (`PenguinController.resumeFall`); stunned counts as your position; "back to the
+  bottom" moves the save to the target before the fade. e2e/savescum.mjs (7 checks) failed before / passes after
+  (verified by removing each fix). Branding: "by Adhvit" on the menu + footer, credits "a game by Adhvit" + Game Design.

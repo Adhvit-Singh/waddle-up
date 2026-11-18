@@ -209,7 +209,8 @@ export class Game implements GameForUI {
       for (let t = 1; t <= this.data.tiersRevealed && t < this.mountain.tiers.length; t++) this.revealInstant(t);
       let p = new THREE.Vector3(this.data.px, this.data.py + 0.2, this.data.pz);
       if (p.lengthSq() < 0.01) p = this.mountain.spawnPoint.clone();
-      this.penguin.teleport(p, this.data.yaw);
+      if (this.data.air) { const a = this.data.air; this.penguin.resumeFall(new THREE.Vector3(a.x, a.y, a.z), new THREE.Vector3(a.vx, a.vy, a.vz), a.peak, this.data.yaw); }
+      else this.penguin.teleport(p, this.data.yaw);
       this.lastSafePos.copy(p); this.lastSafeYaw = this.data.yaw;
     } else {
       // abandoning an old game: its traps become "last game's" so this game differs
@@ -325,7 +326,7 @@ export class Game implements GameForUI {
 
     if (pos.y > this.data.bestHeight) this.data.bestHeight = pos.y;
 
-    if (pc.grounded) {
+    if (pc.grounded || pc.state === PState.Stunned) {
       const gl = pc.groundLedge;
       if (!gl || (!gl.isDynamic && gl.kind !== LedgeKind.Crumble && gl.kind !== LedgeKind.Blink && gl.kind !== LedgeKind.Bouncy)) {
         this.lastSafePos.copy(pos);
@@ -383,6 +384,8 @@ export class Game implements GameForUI {
 
   private *sendToBottomRoutine(message: string, target = this.mountain.spawnPoint, yaw = this.mountain.spawnYaw, isBottom = true): Co {
     this.sendingToBottom = true;
+    this.lastSafePos.copy(target); this.lastSafeYaw = yaw;
+    this.saveNow();
     this.penguin.inputLocked = true;
     AudioManager.play('suck', 0.9);
     const drop = this.penguin.position.y - target.y;
@@ -412,6 +415,8 @@ export class Game implements GameForUI {
   }
 
   private saveNowForce() {
+    // falling? save the fall itself, so pausing and quitting mid-air can't put you back on the ledge
+    this.data.air = this.sendingToBottom ? null : this.penguin.airState;
     this.data.px = this.lastSafePos.x; this.data.py = this.lastSafePos.y; this.data.pz = this.lastSafePos.z;
     this.data.yaw = this.lastSafeYaw;
     this.data.bannedTraps = this.traps.exportBans();

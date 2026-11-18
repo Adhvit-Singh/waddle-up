@@ -32,3 +32,11 @@ test('lifetime stats use Unity keys', () => {
   assert.equal(s.getItem('wu_wins'), '3'); assert.equal(s.getItem('wu_besttime'), '612.5'); assert.equal(s.getItem('wu_lifefalls'), '9');
   SaveSystem.clear(); assert.equal(SaveSystem.hasSave, false);
 });
+
+test('a saved fall (air state) loads only if every number is valid', () => {
+  const ok = { x: 1, y: 50, z: 2, vx: 3, vy: -9, vz: 0.5, peak: 55 };
+  assert.deepEqual(normalizeSave({ air: ok } as never).air, ok);
+  assert.equal(normalizeSave({ air: { ...ok, vy: NaN } } as never).air, null);
+  assert.equal(normalizeSave({ air: 'nope' } as never).air, null);
+  assert.equal(normalizeSave({} as never).air, null);
+});

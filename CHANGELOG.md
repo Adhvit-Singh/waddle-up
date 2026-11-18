@@ -5,6 +5,14 @@ A plain-language list of every major update to the game, newest first. It's upda
 
 ---
 
+## v0.8 — No More Pause-Quit Cheating (2026-11-18)
+- **Fixed a cheat:** pausing mid-fall and quitting to the menu put you back on the ledge you fell from.
+  Now the game saves the fall itself, so Continue carries on falling exactly where you left it.
+- Also closed two related holes: quitting while stunned after a big fall, and quitting during a
+  "back to the bottom" trap (trapdoor, golden fish). Both now keep you where the game put you.
+- The home page says **"by Adhvit"**, and the credits open with **"a game by Adhvit"**, with
+  **Game Design: Adhvit** further down.
+
 ## v0.7 — Penguin Roles (2026-11-18)
 - **New: choose a role when you start a New Game.** It's locked for the whole climb; to switch, start a new game.
   Normal is the easiest; every other role has one advantage and a bigger disadvantage. Traps are the same for everyone.

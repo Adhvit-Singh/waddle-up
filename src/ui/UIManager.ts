@@ -382,7 +382,7 @@ export class UIManager {
     this.titleRt = rect('Title', t, [0, 1], [110, -110], [900, 170], [0, 1]);
     const title = label(this.titleRt, 'WADDLE UP', 140, '#fff', 'ul', 'b', false);
     title.style.textShadow = `5px 5px 0 ${UIColors.Accent}`;
-    const sub = text('Sub', t, [0, 1], [118, -280], [900, 50], 'a penguin\'s worst day', 40, UIColors.Ice, 'ul', 'i');
+    const sub = text('Sub', t, [0, 1], [118, -280], [900, 50], 'a penguin\'s worst day  ·  by Adhvit', 40, UIColors.Ice, 'ul', 'i');
     place(sub.parentElement!, [0, 1], [118, -280], [900, 50], [0, 1]);
 
     const col = column('Buttons', t, [0, 0.5], [110, -110], 480, 10, [0, 0.5]);
@@ -397,7 +397,7 @@ export class UIManager {
     const ms = rect('Stats', t, [0, 0], [110, 60], [1200, 40], [0, 0]);
     this.menuStats = label(ms, '', 26, UIColors.Dim, 'ml');
     const ver = rect('Ver', t, [1, 0], [-30, 30], [500, 30], [1, 0]);
-    label(ver, 'v1.0  ·  made with spite and snow', 20, 'rgba(255,255,255,0.45)', 'lr');
+    label(ver, 'v1.0  ·  made by Adhvit with spite and snow', 20, 'rgba(255,255,255,0.45)', 'lr');
   }
 
   private onNewGame() {
@@ -700,11 +700,11 @@ export class UIManager {
     mask.style.overflow = 'hidden';
     this.creditsScroll = rect('Scroll', mask, [0.5, 0], [0, 0], [1400, 2600], [0.5, 1]);
     const txt =
-      '<size=110><b>WADDLE UP</b></size>\n<color=#9fdcff>a penguin\'s worst day</color>\n\n\n' +
+      '<size=110><b>WADDLE UP</b></size>\n<color=#9fdcff>a penguin\'s worst day</color>\n<color=#ffa040>a game by Adhvit</color>\n\n\n' +
       '<color=#ffa040>STARRING</color>\nThe Penguin\n(no fingers, all heart)\n\n' +
       '<color=#ffa040>THE MOUNTAIN</color>\nThe Mountain\n(retired)\n\n' +
       '<color=#ffa040>SPECIAL GUEST</color>\nThe Asteroid\n\n' +
-      '<color=#ffa040>GAME DESIGN</color>\nYou, the one who asked for this\n\n' +
+      '<color=#ffa040>GAME DESIGN</color>\nAdhvit\n\n' +
       '<color=#ffa040>BUILT WITH</color>\nThree.js + Rapier  ·  procedurally generated everything\nNo penguins were harmed. Emotionally, maybe.\n\n' +
       '<color=#ffa040>CHECKPOINTS</color>\nNone\n\n' +
       '<color=#ffa040>SHORTCUTS</color>\nOne golden fish (do not trust)\n\n' +

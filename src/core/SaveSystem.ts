@@ -17,10 +17,13 @@ export interface SaveData {
   firedTraps: string[];       // every trap that fired this game (never repeats this game)
   devUsed: boolean;           // the local dev menu was used: no best time
   role: string;               // the penguin role chosen for this run (locked for the run)
+  /** saved while falling: Continue resumes the fall exactly (no pause-and-quit escape) */
+  air: AirState | null;
 }
+export interface AirState { x: number; y: number; z: number; vx: number; vy: number; vz: number; peak: number; }
 
 export function newSaveData(): SaveData {
-  return { px: 0, py: 0, pz: 0, yaw: 0, time: 0, falls: 0, tiersRevealed: 0, bestHeight: 0, biggestFall: 0, trapsTriggered: 0, inversions: 0, bottomResets: 0, maxStage: 1, bannedTraps: [], firedTraps: [], devUsed: false, role: 'normal' };
+  return { px: 0, py: 0, pz: 0, yaw: 0, time: 0, falls: 0, tiersRevealed: 0, bestHeight: 0, biggestFall: 0, trapsTriggered: 0, inversions: 0, bottomResets: 0, maxStage: 1, bannedTraps: [], firedTraps: [], devUsed: false, role: 'normal', air: null };
 }
 
 /** JsonUtility fills missing fields with defaults; do the same. */
@@ -29,6 +32,8 @@ export function normalizeSave(raw: Partial<SaveData>): SaveData {
   if (!Array.isArray(d.bannedTraps)) d.bannedTraps = [];
   if (!Array.isArray(d.firedTraps)) d.firedTraps = [];
   if (!ROLE_IDS.includes(d.role)) d.role = 'normal';
+  const a = d.air as Partial<AirState> | null;
+  d.air = a && ['x', 'y', 'z', 'vx', 'vy', 'vz', 'peak'].every(k => Number.isFinite((a as Record<string, number>)[k])) ? a as AirState : null;
   return d;
 }
 
