@@ -5,6 +5,8 @@ export default async function (t) {
   const box = async n => JSON.parse(await t.eval(`JSON.stringify(document.querySelector('[data-name="Btn_${n}"]').getBoundingClientRect())`));
   let b = await box('NEW GAME'); await t.click(b.x + b.width / 2, b.y + b.height / 2); await t.sleep(600);
   b = await box('YES'); if (b.width) await t.click(b.x + b.width / 2, b.y + b.height / 2);
+  await t.sleep(400);
+  b = await box('START CLIMB'); await t.click(b.x + b.width / 2, b.y + b.height / 2);   // role screen: Normal is pre-selected
   await t.sleep(3000);
   await t.key('F10', 'keyDown'); await t.key('F10', 'keyUp'); await t.sleep(300);
   const open = await t.eval(`getComputedStyle(document.getElementById('devmenu')).display`);

@@ -18,6 +18,7 @@ import { FakeCheckpoint, ShortcutFish, spawnSnowball } from '../world/Interactab
 import { PenguinController, PState } from '../player/PenguinController.ts';
 import { PenguinVisual } from '../player/PenguinVisual.ts';
 import { Outfit } from '../player/cosmetics/Outfit.ts';
+import { CurrentRole } from '../player/roles/Roles.ts';
 import type { OutfitIds } from '../player/cosmetics/Catalog.ts';
 import { ThirdPersonCamera, CamMode } from '../player/ThirdPersonCamera.ts';
 import { WindSystem } from '../trolls/WindSystem.ts';
@@ -190,7 +191,9 @@ export class Game implements GameForUI {
     this.setCursor(false);
   }
 
-  newGame() { Scheduler.start(this, this.beginRun(false)); }
+  private pendingRole = 'normal';
+  /** start a fresh climb as the given role (locked for the whole run) */
+  newGame(role = 'normal') { this.pendingRole = role; Scheduler.start(this, this.beginRun(false)); }
   continueGame() { Scheduler.start(this, this.beginRun(true)); }
 
   private *beginRun(resume: boolean): Co {
@@ -214,10 +217,14 @@ export class Game implements GameForUI {
       if (old && old.firedTraps.length) SaveSystem.lastRunTraps = old.firedTraps;
       SaveSystem.clear();
       this.data = newSaveData();
+      this.data.role = this.pendingRole;
       this.penguin.teleport(this.mountain.spawnPoint, this.mountain.spawnYaw);
       this.lastSafePos.copy(this.mountain.spawnPoint); this.lastSafeYaw = this.mountain.spawnYaw;
       this.saveNowForce();
     }
+    // the run's role (Continue keeps the saved one) — re-dress the penguin so role looks (Ghost) apply
+    CurrentRole.set(this.data.role);
+    PenguinVisual.instance.applyOutfit(PenguinVisual.instance.outfit);
     this.traps.loadRun(this.data.bannedTraps, this.data.firedTraps, SaveSystem.lastRunTraps);
     this.chaos.resetTimer();
     this.currentStage = this.mountain.stageAtHeight(this.penguin.position.y);
@@ -352,6 +359,8 @@ export class Game implements GameForUI {
     SaveSystem.lifetimeFalls = SaveSystem.lifetimeFalls + 1;
     if (drop > this.data.biggestFall) this.data.biggestFall = drop;
     let msg = Taunts.forFall(drop);
+    const rt = CurrentRole.role.taunts;
+    if (rt.length && Math.random() < 0.35) msg = rt[Math.floor(Math.random() * rt.length)];
     if (at.y < 1.5 && drop > 12) { msg = Taunts.pick(Taunts.Bottom); this.data.bottomResets++; }
     this.ui.taunt(msg);
     this.ui.toast(`-${Math.round(drop)} m`, css(1, 0.5, 0.45), 1.1);
@@ -418,6 +427,7 @@ export class Game implements GameForUI {
     else { this.cam.mode = this.camBeforeWardrobe; PenguinVisual.instance.lookAtPoint = null; }
   }
   get outfit() { return PenguinVisual.instance.outfit; }
+  get roleName() { return CurrentRole.role.name; }
   setOutfit(o: OutfitIds) { PenguinVisual.instance.applyOutfit(o); Outfit.save(o); }
 
   penguinHeight() { return this.penguin.object.position.y; }

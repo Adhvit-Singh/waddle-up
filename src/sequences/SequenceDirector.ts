@@ -232,9 +232,10 @@ export class SequenceDirector {
     ui.fakeWinShow(false);
 
     // ---- results
-    const best = SaveSystem.bestTime;
+    const roleId = gm.data.role;
+    const best = SaveSystem.bestTimeFor(roleId);
     const newBest = !gm.data.devUsed && (best <= 0 || finalTime < best);
-    if (newBest && !gm.data.devUsed) SaveSystem.bestTime = finalTime;
+    if (newBest && !gm.data.devUsed) SaveSystem.setBestTimeFor(roleId, finalTime);
     SaveSystem.wins = SaveSystem.wins + 1;
     const data = gm.data;
     gm.traps.endRun();

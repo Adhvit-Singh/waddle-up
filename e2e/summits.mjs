@@ -11,6 +11,9 @@ export default async function (t) {
   await t.sleep(9000);
   await click('NEW GAME'); await t.sleep(600);
   if ((await box('YES')).width) await click('YES');
+  // pick a role (Normal) on the role screen
+  { const r = JSON.parse(await t.eval(`JSON.stringify(document.querySelector('[data-name="Role_normal"]').getBoundingClientRect())`)); await t.click(r.x + r.width / 2, r.y + r.height / 2); await t.sleep(300); }
+  await click('START CLIMB');
   check(await until('__wu.state === 2', 20000), 'new game starts');
 
   for (const i of [0, 1]) {

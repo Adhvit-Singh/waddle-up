@@ -126,3 +126,9 @@ tests/                      node --test unit tests (npm test)
   OUTFITS 12 · EXTRAS 30 · FEET 10 (`src/player/cosmetics/Catalog.ts`). RANDOMISE / RESET / BACK (or Esc). The camera
   orbits the penguin (which turns to face you); the outfit is saved in the browser (`wu_outfit`). Main menu buttons
   slimmed so 7 fit on short screens. Tests 70/70; e2e/wardrobe.mjs (14 checks) + traps/pause/devmenu/summits pass.
+- **2026-11-18 (roles, v0.7)**: design `docs/superpowers/specs/2026-11-18-roles-design.md`. 8 roles in
+  `src/player/roles/Roles.ts` (data + numeric modifiers), chosen on a role screen after NEW GAME / GIVE UP, saved as
+  `SaveData.role` (old saves → normal), best time per role. Traps call a role-aware `knockback()`; bouncy ledges and
+  cutscenes still use `launch()`. Tests: every role can make all 296 jumps and can't land >2 ledges ahead (no new skips);
+  role data complete; save normalisation. e2e/roles.mjs: role screen, HUD, save, Continue keeps role, Give Up asks again,
+  Old 3.68 m/s, Squirrel 5.29 m/s + wanders, Ghost see-through. Older e2e scripts updated to pass the role screen.

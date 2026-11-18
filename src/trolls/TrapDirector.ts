@@ -227,7 +227,7 @@ export class TrapDirector {
         ui?.toast('*ACHOO!*', css(1, 1, 1), 0.6);
         if (pc && (pc.grounded || pc.state === 1 /* Air */)) {
           const side = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), pc.facing).normalize().multiplyScalar(UnityRandom.value() < 0.5 ? -1 : 1);
-          pc.launch(side.multiplyScalar(UnityRandom.range(2.5, 3.8)).add(new THREE.Vector3(0, 3.6, 0)).addScaledVector(pc.facing, -0.8), 0.2);
+          pc.knockback(side.multiplyScalar(UnityRandom.range(2.5, 3.8)).add(new THREE.Vector3(0, 3.6, 0)).addScaledVector(pc.facing, -0.8), 0.2);
         }
         break;
 
@@ -253,7 +253,7 @@ export class TrapDirector {
         if (pc && pc.groundLedge === l) {
           const r = UnityRandom.insideUnitSphere();
           const rnd = new THREE.Vector3(r.x, 0, r.z).normalize();
-          pc.launch(new THREE.Vector3(0, 9.5, 0).addScaledVector(rnd, 2.8), 0.25);
+          pc.knockback(new THREE.Vector3(0, 9.5, 0).addScaledVector(rnd, 2.8), 0.25);
           AudioManager.play('bounce');
           ui?.taunt('Boing.');
         }

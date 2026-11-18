@@ -14,6 +14,8 @@ export interface PenguinRef {
   readonly position: THREE.Vector3;
   readonly object: THREE.Object3D;
   launch(velocity: THREE.Vector3, noGround: number): void;
+  /** a trap/hazard throwing the penguin (role-aware) */
+  knockback(velocity: THREE.Vector3, noGround: number): void;
   slipNextGrab(seconds: number): void;
 }
 

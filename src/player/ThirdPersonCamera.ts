@@ -11,6 +11,8 @@ import { GameSettings } from '../core/GameSettings.ts';
 import { PenguinController, PState } from './PenguinController.ts';
 import type { MountainGenerator } from '../world/MountainGenerator.ts';
 import { TrapEffects } from '../trolls/TrapEffects.ts';
+import { CurrentRole } from './roles/Roles.ts';
+import { UnityRandom as UR } from '../core/rng.ts';
 
 export const CamMode = { Follow: 0, MenuOrbit: 1, Cutscene: 2, Wardrobe: 3 } as const;
 export type CamMode = (typeof CamMode)[keyof typeof CamMode];
@@ -146,6 +148,7 @@ export class ThirdPersonCamera {
     }
     this.pitch = clamp(this.pitch, -30, 72);
     this.swingOutIfSqueezed(dt);
+    this.squirrelGlance();
     const flipStep = sign(this.yawExtra) * Math.min(Math.abs(this.yawExtra), 600 * dt);
     this.yaw += flipStep; this.yawExtra -= flipStep;
     this.place(dt, false);
@@ -155,6 +158,19 @@ export class ThirdPersonCamera {
    * Round 3: when rock behind the penguin would pull the camera in tight (view blocked), swing the camera around toward
    * "outward from the mountain" instead, so you keep a clear view. The normal collision pull-in stays as a safety net.
    */
+  private nextGlance = 0;
+  /** Squirrel role: every so often the camera glances at a "shiny thing" and back */
+  private squirrelGlance() {
+    if (!CurrentRole.mods.glances || !(refs.game?.isPlaying ?? false)) { this.nextGlance = Time.time + 14; return; }
+    if (this.nextGlance === 0) this.nextGlance = Time.time + 14;
+    if (Time.time < this.nextGlance) return;
+    this.nextGlance = Time.time + UR.range(12, 20);
+    const side = UR.value() < 0.5 ? -1 : 1;
+    this.yawExtra += side * 55;
+    const back = Time.time + 1.1;
+    const id = setInterval(() => { if (Time.time >= back) { this.yawExtra -= side * 55; clearInterval(id); } }, 50);
+  }
+
   private swingOutIfSqueezed(dt: number) {
     if (!this.target) return;
     const from = this.target.position.clone().add(new THREE.Vector3(0, 1, 0));
@@ -186,7 +202,12 @@ export class ThirdPersonCamera {
     const pc = PenguinController.instance;
     if (pc && pc.state === PState.Air) fall = inverseLerp(12, 35, -pc.velocity.y);
     const zoom = TrapEffects.activeCameraTroll?.kind === 'zoom';
-    this.setFov(lerp(this.cam.fov, zoom ? 24 : 60 + fall * 14, snap ? 1 : dt * (zoom ? 10 : 3)));
+    // roles: Scaredy gets tunnel vision up high, the Show-off zooms in dramatically on every jump
+    const r = CurrentRole.mods;
+    let roleFov = 0;
+    if (r.tremble && pc) { const h01 = Math.min(1, Math.max(0, pc.position.y / 230)); roleFov -= 18 * h01 * h01; }
+    if (r.jumpZoom && pc && Time.time - pc.flipAt < 0.7) roleFov -= 14;
+    this.setFov(lerp(this.cam.fov, zoom ? 24 : 60 + fall * 14 + roleFov, snap ? 1 : dt * (zoom ? 10 : 3)));
   }
 
   private setFov(f: number) {

@@ -8,6 +8,7 @@ import { STAGES } from '../core/StageData.ts';
 import { AudioManager } from '../audio/AudioManager.ts';
 import { Effects, type ParticleSystem } from '../world/Effects.ts';
 import { stageGustStrength } from './windStrength.ts';
+import { CurrentRole } from '../player/roles/Roles.ts';
 
 /** Periodic gusts in windy stages + trap gusts. Pushes the penguin and shows streaks. */
 export class WindSystem {
@@ -35,7 +36,9 @@ export class WindSystem {
   gust(dir: THREE.Vector3, strength: number, duration: number) {
     dir = dir.clone(); dir.y = 0;
     this.gustDir.copy(dir.normalize());
-    this.gustStrength = strength;
+    // roles: Old Penguin is pushed less, the Ghost sometimes doesn't feel it at all
+    const r = CurrentRole.mods;
+    this.gustStrength = r.passThrough > 0 && UnityRandom.value() < r.passThrough ? 0 : strength * r.knockback;
     this.gustUntil = Time.time + duration;
     AudioManager.play('gust', 0.9);
   }

@@ -59,7 +59,7 @@ export class FakeCheckpoint {
     const p = refs.penguin;
     if (spring && p && !p.locked) {
       const outward = pos.clone(); outward.y = 0; outward.normalize();
-      p.launch(new THREE.Vector3(0, 7.5, 0).addScaledVector(outward, 6.5), 0.3);
+      p.knockback(new THREE.Vector3(0, 7.5, 0).addScaledVector(outward, 6.5), 0.3);
       AudioManager.play('bounce');
       refs.ui?.taunt('This checkpoint is spring-loaded.');
       refs.traps?.registerExternalTrap('spring');
@@ -116,7 +116,7 @@ export function spawnSnowball(scene: THREE.Scene, from: THREE.Vector3, penguinCo
       if (touching) {
         hit = true;
         const dir = pc.position.sub(go.position); dir.y = 0;
-        pc.launch(dir.normalize().multiplyScalar(7).add(new THREE.Vector3(0, 4, 0)), 0.3);
+        pc.knockback(dir.normalize().multiplyScalar(7).add(new THREE.Vector3(0, 4, 0)), 0.3);
         AudioManager.play('bonk', 1);
         AudioManager.play('squawk', 0.7);
         Effects.snow(go.position.clone(), 30);

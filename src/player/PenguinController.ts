@@ -7,6 +7,7 @@ import { refs } from '../core/refs.ts';
 import { UnityRandom } from '../core/rng.ts';
 import { inverseLerp, moveTowardsV, rotateTowards, dirFromYaw, smoothStep, lerpUnclamped, UP } from '../core/math.ts';
 import { MOVE_SPEED, JUMP_V } from '../world/MountainData.ts';
+import { CurrentRole } from './roles/Roles.ts';
 import type { Ledge } from '../world/Ledge.ts';
 import { AudioManager } from '../audio/AudioManager.ts';
 import { Effects } from '../world/Effects.ts';
@@ -18,8 +19,11 @@ export const PState = { Ground: 0, Air: 1, Hang: 2, Climb: 3, Stunned: 4, Ragdol
 export type PState = (typeof PState)[keyof typeof PState];
 
 export const RADIUS = 0.34, HEIGHT = 1.12;
-const SPEED = MOVE_SPEED;
-const GRIP_TIME = 3.5;
+const BASE_GRIP = 3.5;
+const role = () => CurrentRole.mods;
+/** walking speed for the current role (air speed; on the ground the Ice Skater is faster still) */
+const speedNow = () => MOVE_SPEED * role().speed;
+const gripTime = () => BASE_GRIP * role().grip;
 const GRAVITY = new THREE.Vector3(0, -9.81, 0);
 
 type Fn<A extends unknown[]> = (...a: A) => void;
@@ -77,7 +81,7 @@ export class PenguinController {
   get locked() { return this.inputLocked || this.state === PState.Ragdoll; }
   get grounded() { return this.state === PState.Ground; }
   get hanging() { return this.state === PState.Hang || this.state === PState.Climb; }
-  get grip01() { return this.state === PState.Hang ? Math.min(1, Math.max(0, 1 - this.hangTime / GRIP_TIME)) : 1; }
+  get grip01() { return this.state === PState.Hang ? Math.min(1, Math.max(0, 1 - this.hangTime / gripTime())) : 1; }
   get rawMove() { return this.moveInput; }
   /** physics position of the feet */
   get position() { const t = this.body.translation(); return new THREE.Vector3(t.x, t.y, t.z); }
@@ -130,6 +134,8 @@ export class PenguinController {
       this.lastDelayedMove = out;
       m = out; jump = j; drop = d;
     } else if (this.delayed.length) { this.delayed = []; this.lastDelayedMove = { x: 0, y: 0 }; }
+    m = this.roleInput(m, jump);
+    jump = this.roleJump(jump);
     m = refs.chaos(m);
     const len = Math.hypot(m.x, m.y);
     this.moveInput = len > 1 ? { x: m.x / len, y: m.y / len } : m;
@@ -158,7 +164,7 @@ export class PenguinController {
       case PState.Hang: this.updateHang(dt); break;
       case PState.Climb: this.updateClimb(dt); break;
       case PState.Ragdoll: {
-        const v = this.velocity.addScaledVector(GRAVITY, this.gravityScale * dt);
+        const v = this.velocity.addScaledVector(GRAVITY, this.gravityScale * role().gravity * dt);
         this.body.setLinvel(v, true);
         break;
       }
@@ -216,8 +222,9 @@ export class PenguinController {
       if (this.state === PState.Stunned && Time.time >= this.stunUntil) this.state = PState.Ground;
 
       const ice = ledge != null && ledge.isIcy;
-      const accel = wish.lengthSq() > 0.0001 ? (ice ? 5 : 38) : (ice ? 0.8 : 15);
-      const target = wish.clone().multiplyScalar(SPEED);
+      const k = ice ? role().iceAccel : role().groundAccel;
+      const accel = (wish.lengthSq() > 0.0001 ? (ice ? 5 : 38) : (ice ? 0.8 : 15)) * k;
+      const target = wish.clone().multiplyScalar(speedNow() * role().groundSpeed);
       moveTowardsV(this.relVel, target, accel * dt, this.relVel);
       v.copy(this.relVel).add(new THREE.Vector3(pv.x, 0, pv.z)).add(new THREE.Vector3(this.externalAccel.x, 0, this.externalAccel.z).multiplyScalar(0.22));
       v.y = hit.distance > 0.13 ? Math.min(v.y, pv.y - 1.5) : pv.y;
@@ -235,7 +242,8 @@ export class PenguinController {
       // jump
       if (this.jumpBuffer > 0 && this.state === PState.Ground) {
         this.jumpBuffer = 0;
-        v.y = JUMP_V + Math.max(0, pv.y);
+        v.y = JUMP_V * role().jump + Math.max(0, pv.y);
+        if (role().flip) this.showOff(v);
         this.noGroundUntil = Time.time + 0.15;
         this.state = PState.Air;
         AudioManager.play('jump', 0.7, UnityRandom.range(0.92, 1.1));
@@ -251,19 +259,19 @@ export class PenguinController {
       this.coyote -= dt;
       if (this.jumpBuffer > 0 && this.coyote > 0 && v.y < 1 && this.state === PState.Air) {
         this.jumpBuffer = 0; this.coyote = 0;
-        v.y = JUMP_V;
+        v.y = JUMP_V * role().jump;
         this.noGroundUntil = Time.time + 0.15;
         AudioManager.play('jump', 0.7);
         this.jumped.emit(null);
       }
 
       this.airTime += dt;
-      v.addScaledVector(GRAVITY, this.gravityScale * dt).addScaledVector(this.externalAccel, dt);
+      v.addScaledVector(GRAVITY, this.gravityScale * role().gravity * dt).addScaledVector(this.externalAccel, dt);
       let h = new THREE.Vector3(v.x, 0, v.z);
       if (wish.lengthSq() > 0.0001) {
-        const target = wish.clone().multiplyScalar(SPEED);
+        const target = wish.clone().multiplyScalar(speedNow());
         let nh = moveTowardsV(h, target, 9 * dt);
-        if (h.length() > SPEED && nh.length() < h.length() && h.dot(target) > 0) nh = h;
+        if (h.length() > speedNow() && nh.length() < h.length() && h.dot(target) > 0) nh = h;
         h = nh;
       }
       v.x = h.x; v.z = h.z;
@@ -299,7 +307,7 @@ export class PenguinController {
   private onLand(ledge: Ledge | null, impact: number) {
     const pos = this.position;
     const drop = this.airPeakY - pos.y;
-    if (impact > 15) {
+    if (impact > 15 && !role().noStun) {
       this.state = PState.Stunned;
       this.stunUntil = Time.time + 1.1;
       this.relVel.set(0, 0, 0);
@@ -379,7 +387,7 @@ export class PenguinController {
       this.drop();
       return;
     }
-    if (this.hangTime > GRIP_TIME) {
+    if (this.hangTime > gripTime()) {
       refs.ui?.taunt(Taunts.pick(Taunts.GripLost));
       this.drop();
       return;
@@ -431,6 +439,71 @@ export class PenguinController {
   // ------------------------------------------------------------------ external control
 
   /** Throws the penguin (traps, bounce pads, sweepers). */
+  /** A trap / hazard throwing the penguin: the role decides how much it moves (Old Penguin less, Ghost sometimes not at all). */
+  knockback(velocity: THREE.Vector3, noGround: number) {
+    if (role().passThrough > 0 && UnityRandom.value() < role().passThrough) {
+      refs.ui?.taunt('It went right through you. Spooky.');
+      return;
+    }
+    this.launch(velocity.clone().multiplyScalar(role().knockback), noGround);
+  }
+
+  // ------------------------------------------------------------------ role behaviour
+  private idleFor = 0;
+  private wanderDir: { x: number; y: number } | null = null;
+  private wanderUntil = 0;
+  private lateJumpAt = 0;
+  /** Show-off: time of the last jump (the model flips) */
+  flipAt = -99;
+
+  /** tremble (Scaredy), drift (Bird Brain), wandering off (Squirrel) */
+  private roleInput(m: { x: number; y: number }, _jump: boolean) {
+    const r = role();
+    const t = Time.time;
+    const moving = m.x * m.x + m.y * m.y > 0.01;
+    if (r.wander) {
+      if (moving || !this.grounded || this.locked || !(refs.game?.isPlaying ?? false)) { this.idleFor = 0; this.wanderDir = null; }
+      else {
+        this.idleFor += Time.deltaTime;
+        if (!this.wanderDir && this.idleFor > 2) {
+          const a = UnityRandom.value() * Math.PI * 2;
+          this.wanderDir = { x: Math.sin(a) * 0.6, y: Math.cos(a) * 0.6 };
+          this.wanderUntil = t + 0.9;
+        }
+        if (this.wanderDir) {
+          if (t < this.wanderUntil) return this.wanderDir;
+          this.wanderDir = null; this.idleFor = 0;
+        }
+      }
+    }
+    let out = m;
+    const rot = (v: { x: number; y: number }, deg: number) => { const c = Math.cos(deg * Math.PI / 180), s2 = Math.sin(deg * Math.PI / 180); return { x: v.x * c - v.y * s2, y: v.x * s2 + v.y * c }; };
+    if (r.drift > 0 && moving) out = rot(out, r.drift * (0.4 + 0.6 * Math.sin(t * 0.23)));
+    if (r.tremble && moving) {
+      const h01 = Math.min(1, Math.max(0, this.position.y / 230));
+      out = rot(out, Math.sin(t * 6.1) * Math.sin(t * 2.3 + 1) * 45 * h01 * h01);
+      const shake = 1 - 0.25 * h01 * Math.abs(Math.sin(t * 9.7));
+      out = { x: out.x * shake, y: out.y * shake };
+    }
+    return out;
+  }
+
+  /** Bird Brain: some jumps happen a beat late */
+  private roleJump(jump: boolean) {
+    if (this.lateJumpAt > 0 && Time.time >= this.lateJumpAt) { this.lateJumpAt = 0; return true; }
+    if (jump && role().lateJump > 0 && UnityRandom.value() < role().lateJump) { this.lateJumpAt = Time.time + 0.35; return false; }
+    return jump;
+  }
+
+  /** Show-off: flip, and the flip nudges where you land */
+  private showOff(v: THREE.Vector3) {
+    this.flipAt = Time.time;
+    const a = (UnityRandom.value() - 0.5) * 2 * 14 * Math.PI / 180;
+    const x = v.x * Math.cos(a) - v.z * Math.sin(a), z = v.x * Math.sin(a) + v.z * Math.cos(a);
+    v.x = x; v.z = z;
+    this.relVel.set(x, 0, z);
+  }
+
   launch(velocity: THREE.Vector3, noGround: number) {
     if (this.state === PState.Ragdoll) return;
     this.body.setBodyType(RAPIER.RigidBodyType.Dynamic, true);
@@ -459,6 +532,7 @@ export class PenguinController {
     this.gravityScale = 1;
     this.slipUntil = 0; this.slipAt = 0; this.delayed = [];
     this.lastStoodIndex = -1;
+    this.lateJumpAt = 0; this.wanderDir = null; this.idleFor = 0;
     this.facing = dirFromYaw(yaw);
     this.body.lockRotations(true, true);
     this.body.setRotation({ x: 0, y: 0, z: 0, w: 1 }, true);
@@ -494,7 +568,7 @@ export class PenguinController {
       const r = this.position.sub(armPos);
       const contactVel = new THREE.Vector3(0, sp, 0).cross(r); contactVel.y = 0;
       const push = away.normalize().multiplyScalar(4).addScaledVector(contactVel.lengthSq() > 0 ? contactVel.normalize() : contactVel, 6).add(new THREE.Vector3(0, 4.5, 0));
-      this.launch(push, 0.3);
+      this.knockback(push, 0.3);
       AudioManager.play('bonk', 0.9);
       AudioManager.play('squawk', 0.6, 1.2);
       refs.traps?.registerExternalTrap('sweeper');

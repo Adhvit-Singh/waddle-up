@@ -76,7 +76,7 @@ export function seagullAttack(scene: THREE.Scene) {
           if (!pc.hanging && !pc.locked) {
             const push = vel.clone(); push.y = 0;
             if (push.lengthSq() < 0.01) push.copy(side);
-            pc.launch(push.normalize().multiplyScalar(3.6).add(V(0, 3.6, 0)), 0.2);
+            pc.knockback(push.normalize().multiplyScalar(3.6).add(V(0, 3.6, 0)), 0.2);
             AudioManager.play('bonk', 0.9);
             AudioManager.play('squawk', 0.7);
             Effects.sparkle(tgt, col(1, 1, 1), 24);

@@ -13,6 +13,7 @@ import { chaosModeName } from '../trolls/ControlChaos.ts';
 import { resumeDodges } from '../core/pauseRules.ts';
 import { CATALOG, CATEGORY_ORDER, CATEGORY_LABEL, DEFAULT_OUTFIT, type Category, type OutfitIds } from '../player/cosmetics/Catalog.ts';
 import { Outfit } from '../player/cosmetics/Outfit.ts';
+import { ROLES, roleById } from '../player/roles/Roles.ts';
 import {
   UIColors, rect, stretch, image, panel, label, text, button, column, sliderRow, optionRow, DodgeButton, setPos, place, type Txt,
 } from './UIFactory.ts';
@@ -23,7 +24,8 @@ export interface GameForUI {
   readonly tiersRevealed: number;
   data: SaveData;
   continueGame(): void;
-  newGame(): void;
+  newGame(role?: string): void;
+  readonly roleName: string;
   setPaused(p: boolean): void;
   toMenu(): void;
   saveNow(): void;
@@ -62,6 +64,8 @@ export class UIManager {
   private credits!: HTMLElement; private confirmEl!: HTMLElement; private stats!: HTMLElement; private fakeWin!: HTMLElement;
   private wardrobe!: HTMLElement; private wardrobeFrom: HTMLElement | null = null; private wardrobeTab: Category = 'hat';
   private wardrobeList!: HTMLElement; private wardrobeTabs: Partial<Record<Category, HTMLElement>> = {};
+  private roleSel!: HTMLElement; private roleFrom: HTMLElement | null = null; private roleChoice = 'normal';
+  private roleCards: Record<string, HTMLElement> = {}; private roleText!: Txt;
   private fadeEl!: HTMLElement; private blackoutEl!: HTMLElement; private blackoutText!: Txt;
   private fadeA = 1; private fadeColor = 'rgb(0,0,0)';
   private crashEl!: HTMLElement; private crashDots!: Txt; private saveEl!: HTMLElement; private saveFill!: HTMLElement;
@@ -108,7 +112,7 @@ export class UIManager {
     addEventListener('resize', () => this.layout());
     this.layout();
     this.buildHUD(); this.buildMenu(); this.buildPause(); this.buildSettings(); this.buildHow(); this.buildCredits();
-    this.buildConfirm(); this.buildStats(); this.buildFakeWin(); this.buildWardrobe(); this.buildOverlays();
+    this.buildConfirm(); this.buildStats(); this.buildFakeWin(); this.buildWardrobe(); this.buildRoleSelect(); this.buildOverlays();
     this.hideAll();
   }
 
@@ -122,7 +126,7 @@ export class UIManager {
   }
 
   private screen(name: string) { const el = stretch(name, this.root); el.classList.add('screen'); return el; }
-  private hideAll() { for (const g of [this.menu, this.hud, this.pause, this.settings, this.how, this.credits, this.confirmEl, this.stats, this.fakeWin, this.wardrobe]) show(g, false); }
+  private hideAll() { for (const g of [this.menu, this.hud, this.pause, this.settings, this.how, this.credits, this.confirmEl, this.stats, this.fakeWin, this.wardrobe, this.roleSel]) show(g, false); }
 
   // =================================================================== HUD
 
@@ -132,6 +136,10 @@ export class UIManager {
     const sp = panel('StagePanel', t, [0, 1], [30, -30], [520, 96]);
     place(sp, [0, 1], [30, -30], [520, 96], [0, 1]);
     this.stageText = text('Stage', sp, [0.5, 0.5], [0, 0], [490, 90], '', 30, UIColors.Text, 'ml');
+    // which role you're playing
+    const rl = rect('Role', t, [0, 1], [0, 0], [520, 30]);
+    place(rl, [0, 1], [36, -132], [520, 30], [0, 1]);
+    this.roleText = label(rl, '', 22, UIColors.Ice, 'ml', 'i');
 
     const tp = panel('TimePanel', t, [1, 1], [0, 0], [330, 96]);
     place(tp, [1, 1], [-30, -30], [330, 96], [1, 1]);
@@ -182,6 +190,7 @@ export class UIManager {
     if (!shown(this.hud) || !this.gm) return;
     const gm = this.gm;
     const st = gm.currentStage;
+    this.roleText.set('as ' + this.gm.roleName);
     this.stageText.set(`<color=#9fdcff><size=22>STAGE ${st + 1} / 20</size></color>\n<b>${STAGES[st].name}</b>`);
     show(this.timerRow, GameSettings.showTimer);
     this.timerText.set(UIManager.formatTime(gm.data.time));
@@ -392,8 +401,8 @@ export class UIManager {
   }
 
   private onNewGame() {
-    if (SaveSystem.hasSave) this.confirm('Start over? Your current climb will be lost.\n<size=24>(like it usually is)</size>', () => this.gm.newGame());
-    else this.gm.newGame();
+    if (SaveSystem.hasSave) this.confirm('Start over? Your current climb will be lost.\n<size=24>(like it usually is)</size>', () => this.openRoleSelect(this.menu));
+    else this.openRoleSelect(this.menu);
   }
 
   private quit() {
@@ -430,7 +439,7 @@ export class UIManager {
     button(col, 'WARDROBE', () => this.openWardrobe(this.pause), 460, 68, css(0.55, 0.3, 0.75));
     button(col, 'SETTINGS', () => this.openSettings(this.pause), 460, 68);
     button(col, 'HOW TO PLAY', () => { show(this.pause, false); show(this.how, true); this.settingsReturn = this.pause; }, 460, 68);
-    button(col, 'GIVE UP (RESTART)', () => this.confirm('Restart from the very bottom?', () => this.gm.newGame()), 460, 68, css(0.35, 0.18, 0.22));
+    button(col, 'GIVE UP (RESTART)', () => this.confirm('Restart from the very bottom?', () => this.openRoleSelect(this.pause)), 460, 68, css(0.35, 0.18, 0.22));
     button(col, 'MAIN MENU', () => this.gm.toMenu(), 460, 68);
   }
 
@@ -449,6 +458,7 @@ export class UIManager {
   back(): boolean {
     if (shown(this.confirmEl)) { show(this.confirmEl, false); return true; }
     if (shown(this.wardrobe)) { this.closeWardrobe(); return true; }
+    if (shown(this.roleSel)) { this.closeRoleSelect(); return true; }
     if (shown(this.settings)) { this.closeSettings(); return true; }
     if (shown(this.how)) { show(this.how, false); show(this.settingsReturn === this.pause ? this.pause : this.menu, true); this.settingsReturn = null; return true; }
     if (shown(this.credits) && !this.creditsRolling) { show(this.credits, false); this.showMenu(); return true; }
@@ -580,6 +590,61 @@ export class UIManager {
 
   get wardrobeOpen() { return shown(this.wardrobe); }
 
+  // =================================================================== ROLE SELECT
+
+  private buildRoleSelect() {
+    this.roleSel = this.screen('RoleSelect');
+    this.roleSel.style.background = css(0.02, 0.04, 0.1, 0.82);
+    text('Title', this.roleSel, [0.5, 1], [0, -60], [1600, 80], 'CHOOSE YOUR PENGUIN', 64, '#fff', 'mc', 'b');
+    text('Sub', this.roleSel, [0.5, 1], [0, -112], [1600, 40], 'locked for the whole climb. to switch, start a new game. choose wisely. (you won\'t.)', 24, UIColors.Ice, 'mc', 'i');
+    const W = 420, H = 310, GAP = 15;
+    ROLES.forEach((r, i) => {
+      const col = i % 4, row = Math.floor(i / 4);
+      const card = rect('Role_' + r.id, this.roleSel, [0.5, 0.5], [(col - 1.5) * (W + GAP), 130 - row * (H + GAP)], [W, H]);
+      card.classList.add('btn');
+      image(card, UIColors.Panel);
+      card.style.border = '3px solid rgba(255,255,255,0.08)';
+      text('N', card, [0.5, 1], [0, -30], [W - 30, 40], r.name, 30, '#fff', 'mc', 'b');
+      text('T', card, [0.5, 1], [0, -66], [W - 30, 30], r.tagline, 19, UIColors.Accent, 'mc', 'i');
+      text('D', card, [0.5, 0.5], [0, 22], [W - 36, 100], r.description, 19, UIColors.Dim, 'mc');
+      if (r.id === 'normal') text('E', card, [0.5, 0], [0, 55], [W - 36, 60], '<b>EASIEST</b>\nno advantages, no disadvantages', 20, css(0.6, 0.9, 1), 'mc');
+      else {
+        text('P', card, [0.5, 0], [0, 78], [W - 36, 50], '+ ' + r.plus, 18, css(0.45, 0.95, 0.55), 'mc', 'b');
+        text('M', card, [0.5, 0], [0, 28], [W - 36, 50], '− ' + r.minus, 18, css(1, 0.5, 0.45), 'mc', 'b');
+      }
+      card.addEventListener('mouseenter', () => AudioManager.play('hover', 0.5));
+      card.addEventListener('click', e => { e.stopPropagation(); AudioManager.play('pop', 0.6); this.roleChoice = r.id; this.refreshRoleSelect(); });
+      this.roleCards[r.id] = card;
+    });
+    const start = button(this.roleSel, 'START CLIMB', () => { show(this.roleSel, false); this.gm.newGame(this.roleChoice); }, 420, 78, css(0.95, 0.5, 0.15), 34);
+    place(start, [0.5, 0], [130 + 210, 70], [420, 78]); start.classList.remove('flow');
+    const back = button(this.roleSel, 'BACK', () => this.closeRoleSelect(), 300, 78, undefined, 30);
+    place(back, [0.5, 0], [-130 - 150, 70], [300, 78]); back.classList.remove('flow');
+  }
+
+  private refreshRoleSelect() {
+    for (const [id, card] of Object.entries(this.roleCards)) {
+      const on = id === this.roleChoice;
+      card.style.border = on ? '4px solid ' + UIColors.Accent : '3px solid rgba(255,255,255,0.08)';
+      card.style.background = on ? css(0.16, 0.22, 0.38, 0.97) : UIColors.Panel;
+    }
+  }
+
+  openRoleSelect(from: HTMLElement) {
+    this.roleFrom = from;
+    this.hideAll();
+    show(this.roleSel, true);
+    this.roleChoice = 'normal';
+    this.refreshRoleSelect();
+  }
+
+  private closeRoleSelect() {
+    show(this.roleSel, false);
+    show(this.roleFrom ?? this.menu, true);
+    if (this.roleFrom === this.pause) show(this.hud, true);
+    this.roleFrom = null;
+  }
+
   // =================================================================== HOW TO PLAY
 
   private buildHow() {
@@ -701,6 +766,7 @@ export class UIManager {
     this.statsContinue = onContinue;
     const time = UIManager.formatTime(d.time) + (newBest ? '  <color=#ffa040><size=26>NEW BEST!</size></color>' : '');
     this.statsBody.set(
+      `Role  <b>${roleById(d.role).name}</b>\n` +
       `Time  <b>${time}</b>\n` +
       `Falls  <b>${d.falls}</b>\n` +
       `Biggest fall  <b>${Math.round(d.biggestFall)} m</b>\n` +

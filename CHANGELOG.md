@@ -5,6 +5,22 @@ A plain-language list of every major update to the game, newest first. It's upda
 
 ---
 
+## v0.7 — Penguin Roles (2026-11-18)
+- **New: choose a role when you start a New Game.** It's locked for the whole climb; to switch, start a new game.
+  Normal is the easiest; every other role has one advantage and a bigger disadvantage. Traps are the same for everyone.
+  | Role | Advantage | Disadvantage |
+  |---|---|---|
+  | Normal Penguin | — | — |
+  | Scaredy Penguin | grip lasts 50% longer | controls tremble more the higher you are, tunnel vision near the top |
+  | Squirrel Mode | 15% faster | wanders off if you stand still for 2 s, camera glances away |
+  | Bird Brain | never stunned by falls | 1 in 4 jumps happen late, direction drifts |
+  | Old Penguin | never stunned, traps and wind push it 40% less | 20% slower, jumps a bit lower |
+  | Show-off | jumps 15% higher | every jump flips and nudges the landing, dramatic zoom |
+  | Ice Skater | 20% faster on the ground | everything is slippery, ice is nearly impossible |
+  | Ghost Penguin | 1 in 3 trap knock-backs and gusts pass through | floaty low gravity, see-through |
+- Your role shows under the stage name, on the stats screen, and each role keeps its own best time.
+- Each role has its own taunts. "Give Up (Restart)" asks for a role again.
+
 ## v0.6 — The Wardrobe (2026-11-18)
 - **New: WARDROBE** (main menu and pause menu). Dress up your penguin, all free and purely cosmetic:
   - **Colours (14):** classic, hot pink, toxic green, gold chrome, rainbow, zebra, leopard, see-through ghost,

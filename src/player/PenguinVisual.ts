@@ -6,10 +6,12 @@ import { col, clamp, clamp01, lerp, moveTowards, moveTowardsAngle, eulerDeg, Rad
 import { MeshBuilder, meshObject, Mats } from '../world/MeshKit.ts';
 import { CATEGORY_ORDER, DEFAULT_OUTFIT, buildItem, type Anchor, type MatKind, type OutfitIds } from './cosmetics/Catalog.ts';
 import { Outfit } from './cosmetics/Outfit.ts';
+import { CurrentRole } from './roles/Roles.ts';
 import { MOVE_SPEED } from '../world/MountainData.ts';
 import { PenguinController, PState } from './PenguinController.ts';
 
 const ORANGE = col(1, 0.55, 0.12);
+const smoothStepDeg = (t: number) => 360 * t * t * (3 - 2 * t);
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 
 const mats: Partial<Record<MatKind, THREE.Material>> = {};
@@ -75,7 +77,8 @@ export class PenguinVisual {
     for (const cat of CATEGORY_ORDER) {
       for (const part of buildItem(cat, o[cat])) {
         let parent = anchors[part.anchor];
-        const m = meshObject(cat, part.mesh.build(), null, true, material(part.material));
+        // Ghost Penguin role: the whole penguin is see-through
+        const m = meshObject(cat, part.mesh.build(), null, true, material(CurrentRole.mods.seeThrough ? 'ghost' : part.material));
         if (cat === 'eyes') { parent = this.eyes; m.position.set(0, -0.06, 0); }
         if (cat === 'hat' && o.hat === 'beanie') { m.position.set(0, 0, 0); m.quaternion.copy(eulerDeg(-8, 0, 12)); }
         parent.add(m);
@@ -117,7 +120,10 @@ export class PenguinVisual {
     if (hang || climb) pitch = -10;
     this.flop = moveTowards(this.flop, stunned ? 1 : 0, dt * (stunned ? 8 : 2.5));
     pitch = lerp(pitch, 82, this.flop);
-    this.body.quaternion.copy(eulerDeg(pitch, 0, roll));
+    // Show-off role: a full front flip on every jump
+    const flipT = (Time.time - pc.flipAt) / 0.55;
+    const flipDeg = flipT >= 0 && flipT < 1 ? smoothStepDeg(flipT) : 0;
+    this.body.quaternion.copy(eulerDeg(pitch + flipDeg, 0, roll));
     const bob = ground ? Math.abs(s) * 0.05 * speed01 : 0;
     this.body.position.set(0, 0.5 + bob - this.flop * 0.25, this.flop * 0.25);
 
